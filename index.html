@@ -1,0 +1,3304 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>骰子令交互版</title>
+  <style>
+    :root {
+      --ink: #4a4037;
+      --muted: #7b7168;
+      --panel: rgba(255, 255, 255, 0.74);
+      --panel-strong: rgba(255, 255, 255, 0.92);
+      --line: rgba(185, 179, 167, 0.58);
+      --accent: #d88996;
+      --shadow: 0 18px 50px rgba(74, 64, 55, 0.13);
+    }
+
+    * { box-sizing: border-box; }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      color: var(--ink);
+      font-family: "SimHei", "黑体", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at 48% 42%, rgba(255, 243, 199, 0.74) 0, rgba(255, 243, 199, 0.18) 18rem, transparent 34rem),
+        radial-gradient(circle at top left, #fffdf7 0, #f6faff 48%, #f8f1ff 100%);
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+      color: inherit;
+    }
+
+    button {
+      border: 1px solid rgba(74, 64, 55, 0.12);
+      background: var(--panel-strong);
+      border-radius: 8px;
+      min-height: 34px;
+      padding: 0 12px;
+      cursor: pointer;
+      box-shadow: 0 3px 12px rgba(74, 64, 55, 0.06);
+    }
+
+    button:hover,
+    button:focus-visible {
+      border-color: rgba(216, 137, 150, 0.55);
+      outline: none;
+    }
+
+    input,
+    select {
+      min-height: 34px;
+      border: 1px solid rgba(74, 64, 55, 0.12);
+      border-radius: 8px;
+      padding: 0 10px;
+      background: rgba(255, 255, 255, 0.86);
+      min-width: 0;
+    }
+
+    .app {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 380px);
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .topbar {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 14px;
+      align-items: center;
+      padding: 14px 18px 12px;
+      border-bottom: 1px solid rgba(185, 179, 167, 0.32);
+      background: rgba(255, 255, 255, 0.52);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      min-width: 0;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(20px, 2.2vw, 30px);
+      line-height: 1.15;
+      font-weight: 720;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: minmax(150px, 220px) auto auto auto auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .stage {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .graph-meta {
+      position: absolute;
+      left: 18px;
+      bottom: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .pill {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.84);
+      border: 1px solid rgba(74, 64, 55, 0.10);
+      box-shadow: 0 4px 18px rgba(74, 64, 55, 0.08);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    #graph {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      user-select: none;
+      touch-action: none;
+    }
+
+    #graph.dragging {
+      cursor: grabbing;
+    }
+
+    .link {
+      fill: none;
+      stroke: #b9b3a7;
+      stroke-width: 1.2;
+      stroke-opacity: 0.72;
+      transition: stroke-width 160ms ease, stroke-opacity 160ms ease;
+    }
+
+    .link.dimmed {
+      stroke-opacity: 0.12;
+    }
+
+    .link.highlighted {
+      stroke-width: 2.4;
+      stroke-opacity: 0.95;
+      stroke: #d88996;
+    }
+
+    .node-group {
+      cursor: pointer;
+      transition: opacity 160ms ease;
+    }
+
+    .node-group.dimmed {
+      opacity: 0.18;
+    }
+
+    .node-group.hidden-label text {
+      display: none;
+    }
+
+    .node {
+      stroke: #fff;
+      stroke-width: 1.5;
+      filter: drop-shadow(0 7px 10px rgba(74, 64, 55, 0.16));
+      transition: r 160ms ease, stroke-width 160ms ease, opacity 160ms ease;
+    }
+
+    .node-group:hover .node,
+    .node-group.selected .node,
+    .node-group.related .node {
+      stroke: #d88996;
+      stroke-width: 2.4;
+    }
+
+    .node-group.selected .node {
+      filter: drop-shadow(0 0 16px rgba(216, 137, 150, 0.48));
+    }
+
+    .node-label {
+      fill: #4a4037;
+      paint-order: stroke;
+      stroke: rgba(255, 255, 255, 0.86);
+      stroke-width: 4px;
+      stroke-linejoin: round;
+      font-weight: 620;
+      pointer-events: none;
+    }
+
+    .node-label.level-L4 {
+      font-weight: 520;
+      fill: #62574e;
+    }
+
+    .side {
+      min-height: 0;
+      overflow: auto;
+      border-left: 1px solid rgba(185, 179, 167, 0.36);
+      background: rgba(255, 255, 255, 0.62);
+      backdrop-filter: blur(16px);
+      padding: 16px;
+    }
+
+    .section {
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(185, 179, 167, 0.26);
+    }
+
+    .section:first-child {
+      padding-top: 0;
+    }
+
+    .section:last-child {
+      border-bottom: 0;
+    }
+
+    .section-title {
+      margin: 0 0 10px;
+      font-size: 14px;
+      font-weight: 760;
+      line-height: 1.3;
+    }
+
+    .detail-title {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.25;
+      font-weight: 760;
+    }
+
+    .detail-type {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .kv {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .kv b {
+      color: var(--muted);
+      font-weight: 620;
+    }
+
+    .tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .tag {
+      min-height: auto;
+      box-shadow: none;
+      border-radius: 999px;
+      padding: 4px 9px;
+      background: rgba(247, 233, 166, 0.72);
+      border: 1px solid rgba(74, 64, 55, 0.09);
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .filters {
+      display: grid;
+      gap: 8px;
+    }
+
+    .filter-row {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .bar-list {
+      display: grid;
+      gap: 7px;
+      max-height: 260px;
+      overflow: auto;
+      padding-right: 2px;
+    }
+
+    .bar-row {
+      display: grid;
+      grid-template-columns: minmax(86px, 1fr) minmax(80px, 1.4fr) 26px;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      line-height: 1.3;
+    }
+
+    .bar-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #62574e;
+    }
+
+    .bar-track {
+      height: 9px;
+      border-radius: 999px;
+      background: rgba(185, 179, 167, 0.18);
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #f7c9d4, #bfe3d0);
+    }
+
+    .heat-list {
+      display: grid;
+      gap: 7px;
+      max-height: 220px;
+      overflow: auto;
+    }
+
+    .heat-row {
+      display: grid;
+      grid-template-columns: minmax(80px, 1fr) repeat(3, 30px) 42px;
+      gap: 6px;
+      align-items: center;
+      font-size: 12px;
+    }
+
+    .heat-label {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .heat-cell {
+      min-height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      color: #4a4037;
+      border: 1px solid rgba(74, 64, 55, 0.08);
+      background: rgba(255, 255, 255, 0.62);
+    }
+
+    .roller {
+      display: grid;
+      gap: 9px;
+    }
+
+    .roller-controls {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+    }
+
+    .dice-line {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-height: 34px;
+      align-items: center;
+    }
+
+    .die {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: #fff7dc;
+      border: 1px solid rgba(74, 64, 55, 0.13);
+      font-weight: 760;
+      box-shadow: 0 2px 8px rgba(74, 64, 55, 0.08);
+    }
+
+    .mini-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 6px;
+      font-size: 12px;
+      color: #62574e;
+    }
+
+    .mini-list button {
+      width: 100%;
+      min-height: 30px;
+      padding: 0 9px;
+      text-align: left;
+      box-shadow: none;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .legend {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+      font-size: 12px;
+      color: #62574e;
+    }
+
+    .swatch {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(74, 64, 55, 0.10);
+      flex: 0 0 auto;
+    }
+
+    .tooltip {
+      position: fixed;
+      z-index: 20;
+      max-width: min(320px, calc(100vw - 32px));
+      padding: 9px 10px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid rgba(74, 64, 55, 0.12);
+      box-shadow: var(--shadow);
+      color: var(--ink);
+      font-size: 12px;
+      line-height: 1.45;
+      pointer-events: none;
+      opacity: 0;
+      transform: translate(8px, 8px);
+      transition: opacity 120ms ease;
+      white-space: pre-line;
+    }
+
+    .tooltip.show {
+      opacity: 1;
+    }
+
+    .round-end-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(56, 47, 40, 0.28);
+      backdrop-filter: blur(5px);
+    }
+
+    .round-end-modal[hidden] {
+      display: none !important;
+    }
+
+    .round-end-dialog {
+      width: min(360px, calc(100vw - 40px));
+      padding: 28px 26px 24px;
+      border: 1px solid rgba(185, 179, 167, 0.28);
+      border-radius: 8px;
+      background: rgba(255, 253, 248, 0.98);
+      box-shadow: 0 24px 70px rgba(74, 64, 55, 0.22);
+      text-align: center;
+    }
+
+    .round-end-mark {
+      width: 52px;
+      height: 52px;
+      margin: 0 auto 14px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #fff0d3;
+      color: #d8791e;
+      font-size: 24px;
+    }
+
+    .round-end-dialog h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.35;
+    }
+
+    .round-end-dialog p {
+      margin: 10px 0 20px;
+      color: #81766d;
+      font-size: 14px;
+      line-height: 1.65;
+    }
+
+    .round-end-dialog button {
+      width: 100%;
+      min-height: 42px;
+    }
+
+    .empty {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 980px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        min-height: 100%;
+        height: auto;
+        grid-template-columns: 1fr;
+        grid-template-rows: auto minmax(560px, 72vh) auto;
+      }
+
+      .topbar {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        grid-template-columns: minmax(0, 1fr) repeat(2, auto);
+      }
+
+      .controls select {
+        display: none;
+      }
+
+      .side {
+        border-left: 0;
+        border-top: 1px solid rgba(185, 179, 167, 0.36);
+      }
+    }
+
+    @media (max-width: 560px) {
+      .topbar {
+        padding: 12px;
+      }
+
+      .controls {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .controls input {
+        grid-column: 1 / -1;
+      }
+
+      .subtitle {
+        white-space: normal;
+      }
+
+      .side {
+        padding: 12px;
+      }
+    }
+    /* Layout refresh based on the reference screen */
+    body {
+      background:
+        radial-gradient(circle at 46% 42%, rgba(255, 238, 184, 0.58) 0, rgba(255, 248, 226, 0.3) 18rem, transparent 34rem),
+        linear-gradient(115deg, #fffdf8 0%, #f7fbff 55%, #f8f3ff 100%);
+    }
+
+    .app {
+      grid-template-columns: 370px minmax(0, 1fr) 400px;
+      grid-template-rows: 80px minmax(0, 1fr);
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .topbar {
+      height: 80px;
+      padding: 0 40px;
+      grid-column: 1 / -1;
+      grid-template-columns: minmax(300px, 1fr) auto;
+      background: rgba(255, 253, 248, 0.88);
+      border-bottom: 1px solid rgba(185, 179, 167, 0.24);
+      backdrop-filter: blur(18px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-mark {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 14px;
+      background: linear-gradient(145deg, #fff5cf, #f1efff);
+      box-shadow: 0 8px 24px rgba(216, 137, 150, 0.18);
+      font-size: 24px;
+    }
+
+    h1 {
+      font-size: 30px;
+      font-weight: 720;
+    }
+
+    .top-stats {
+      display: flex;
+      align-items: center;
+      gap: 34px;
+      text-align: center;
+    }
+
+    .music-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-right: 22px;
+      border-right: 1px solid rgba(185, 179, 167, 0.28);
+    }
+
+    .music-control button {
+      width: 38px;
+      min-width: 38px;
+      height: 38px;
+      min-height: 38px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border-color: rgba(216, 137, 150, 0.3);
+      background: rgba(255, 250, 238, 0.92);
+      color: #c36e28;
+      font-size: 19px;
+      box-shadow: none;
+    }
+
+    .music-control button[aria-pressed="true"] {
+      border-color: #efaa4c;
+      background: #fff0d3;
+      color: #a85a18;
+    }
+
+    .music-control input[type="range"] {
+      width: 82px;
+      min-height: 24px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      accent-color: #e59b3a;
+      box-shadow: none;
+      cursor: pointer;
+    }
+
+    h1 {
+      font-family: "SimSun", "宋体", "STSong", serif !important;
+    }
+
+    .top-stats strong {
+      display: block;
+      color: #f08a14;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .top-stats span {
+      display: block;
+      margin-top: 5px;
+      color: #b2a79d;
+      font-size: 12px;
+      line-height: 1.1;
+      white-space: nowrap;
+    }
+
+    .left-panel {
+      min-height: 0;
+      display: block;
+      overflow: hidden;
+      border-right: 1px solid rgba(185, 179, 167, 0.28);
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(16px);
+    }
+
+    .left-scroll {
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+    }
+
+    .filter-section {
+      padding: 22px 20px;
+      border-bottom: 1px solid rgba(185, 179, 167, 0.2);
+    }
+
+    .grow-section {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .search-row input {
+      height: 45px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.88);
+      font-size: 14px;
+    }
+
+    .segmented {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .filter-btn {
+      min-height: 35px;
+      padding: 0 13px;
+      border-color: rgba(74, 64, 55, 0.09);
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: none;
+      font-size: 13px;
+      color: #8a8178;
+    }
+
+    .filter-btn.active,
+    .filter-btn:hover {
+      color: #9d5a0b;
+      border-color: #f3a533;
+      background: #fff2d9;
+    }
+
+    .chip-list {
+      max-height: 100%;
+      overflow: auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-content: flex-start;
+      gap: 8px;
+      padding-right: 2px;
+    }
+
+    .chip-list .filter-btn {
+      min-height: 31px;
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .left-actions {
+      display: grid;
+      gap: 10px;
+      padding: 16px 20px 22px;
+      background: rgba(255, 255, 255, 0.62);
+    }
+
+    .primary-action {
+      min-height: 50px;
+      color: #fff;
+      border: 0;
+      background: linear-gradient(135deg, #f6b44a, #df8d1d);
+      font-weight: 760;
+      box-shadow: 0 12px 26px rgba(222, 141, 29, 0.22);
+    }
+
+    #expandButton {
+      width: 100%;
+      min-height: 38px;
+      justify-self: stretch;
+      padding: 0 14px;
+      font-size: 14px;
+      box-shadow: 0 8px 18px rgba(222, 141, 29, 0.18);
+    }
+
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .stage {
+      grid-column: 2;
+      grid-row: 2;
+      background: rgba(255, 255, 255, 0.28);
+    }
+
+    .stage-toolbar {
+      position: absolute;
+      z-index: 4;
+      top: 18px;
+      right: 24px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .stage-toolbar button {
+      min-height: 38px;
+      background: rgba(255, 255, 255, 0.88);
+    }
+
+    .stage-toolbar #resetButton {
+      border-color: rgba(216, 137, 150, 0.34);
+      background: linear-gradient(135deg, #ffd99d, #f9c3d2);
+      color: #8a4f12;
+      font-weight: 760;
+    }
+
+    .canvas-legend {
+      position: absolute;
+      top: 64px;
+      right: 24px;
+      z-index: 3;
+      width: 170px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(185, 179, 167, 0.22);
+      background: rgba(255, 252, 245, 0.9);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+    }
+
+    .canvas-legend .legend {
+      grid-template-columns: 1fr;
+      margin-top: 0;
+    }
+
+    .graph-meta {
+      left: 24px;
+      bottom: 20px;
+    }
+
+    .side {
+      grid-column: 3;
+      grid-row: 2;
+      padding: 0;
+      background: rgba(255, 255, 255, 0.68);
+      border-left: 1px solid rgba(185, 179, 167, 0.28);
+    }
+
+    .tabs {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 58px;
+      padding-left: 42px;
+      border-bottom: 1px solid rgba(185, 179, 167, 0.22);
+    }
+
+    .tab {
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+      background: rgba(255, 255, 255, 0.38);
+      color: #a19890;
+      font-weight: 760;
+    }
+
+    .tab.active {
+      color: #dc7b10;
+      background: rgba(255, 255, 255, 0.72);
+      box-shadow: inset 0 -2px #f08a14;
+    }
+
+    .tab-pane {
+      display: none;
+    }
+
+    .tab-pane.active {
+      display: block;
+    }
+
+    .side .section {
+      padding: 18px 20px;
+    }
+
+    .kv {
+      grid-template-columns: 68px minmax(0, 1fr);
+      align-items: start;
+    }
+
+    .detail-click {
+      border: 0;
+      min-height: 0;
+      padding: 0;
+      background: transparent;
+      box-shadow: none;
+      color: #d67812;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .detail-click:hover {
+      text-decoration: underline;
+    }
+
+    .tag {
+      cursor: pointer;
+    }
+
+    .tag.active,
+    .bar-row.active,
+    .heat-row.active,
+    .heat-cell.active {
+      outline: 2px solid rgba(240, 138, 20, 0.34);
+      background: rgba(255, 242, 217, 0.78);
+    }
+
+    .bar-row,
+    .heat-row {
+      border-radius: 8px;
+      padding: 2px 4px;
+      cursor: pointer;
+    }
+
+    .node-group.related .node {
+      filter: drop-shadow(0 0 16px rgba(240, 138, 20, 0.5));
+    }
+
+    .node-group.filter-match .node {
+      stroke: #f08a14;
+      stroke-width: 3;
+      filter: drop-shadow(0 0 18px rgba(240, 138, 20, 0.56));
+    }
+
+    .link.highlighted {
+      stroke: #f08a14;
+      stroke-width: 2.8;
+    }
+
+    .node-group.dimmed {
+      opacity: 0.13;
+    }
+
+    @media (max-width: 1180px) {
+      body {
+        overflow: auto;
+      }
+
+      .app {
+        min-height: 100%;
+        height: auto;
+        grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+        grid-template-rows: 80px minmax(560px, 72vh) auto;
+      }
+
+      .topbar {
+        padding: 0 22px;
+      }
+
+      .top-stats {
+        gap: 18px;
+      }
+
+      .left-panel {
+        grid-column: 1;
+        grid-row: 2 / 4;
+      }
+
+      .stage {
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      .side {
+        grid-column: 2;
+        grid-row: 3;
+        border-left: 0;
+        border-top: 1px solid rgba(185, 179, 167, 0.28);
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto minmax(560px, 70vh) auto;
+      }
+
+      .topbar {
+        height: auto;
+        min-height: 84px;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 12px;
+      }
+
+      .top-stats {
+        justify-content: space-between;
+      }
+
+      .music-control {
+        padding-right: 10px;
+      }
+
+      .music-control input[type="range"] {
+        width: 60px;
+      }
+
+      .left-panel,
+      .stage,
+      .side {
+        grid-column: 1;
+      }
+
+      .left-panel {
+        grid-row: 2;
+        max-height: none;
+        overflow: visible;
+      }
+
+      .stage {
+        grid-row: 3;
+      }
+
+      .side {
+        grid-row: 4;
+      }
+
+      .canvas-legend {
+        display: none;
+      }
+
+      .stage-toolbar {
+        left: 12px;
+        right: 12px;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+    }
+
+    /* Collapsible sidebars and rule-focused content */
+    .app {
+      transition: grid-template-columns 220ms ease;
+    }
+
+    .left-panel,
+    .side {
+      position: relative;
+    }
+
+    .side {
+      overflow: hidden;
+    }
+
+    .side .tab-pane.active {
+      height: calc(100% - 58px);
+      overflow: auto;
+    }
+
+    .sidebar-toggle {
+      position: absolute;
+      z-index: 8;
+      top: 13px;
+      width: 30px;
+      min-width: 30px;
+      height: 32px;
+      min-height: 32px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      color: #a46522;
+      font-size: 20px;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .left-toggle {
+      right: 12px;
+    }
+
+    .right-toggle {
+      left: 8px;
+    }
+
+    .sidebar-toggle:hover,
+    .sidebar-toggle:focus-visible {
+      background: transparent;
+      color: #e08322;
+    }
+
+    .app.left-collapsed {
+      grid-template-columns: 52px minmax(0, 1fr) 400px;
+    }
+
+    .app.right-collapsed {
+      grid-template-columns: 370px minmax(0, 1fr) 52px;
+    }
+
+    .app.left-collapsed.right-collapsed {
+      grid-template-columns: 52px minmax(0, 1fr) 52px;
+    }
+
+    .app.left-collapsed .left-panel,
+    .app.right-collapsed .side {
+      display: block;
+      overflow: hidden;
+    }
+
+    .app.left-collapsed .left-panel > :not(.sidebar-toggle),
+    .app.right-collapsed .side > :not(.sidebar-toggle) {
+      display: none;
+    }
+
+    .app.left-collapsed .left-toggle,
+    .app.right-collapsed .right-toggle {
+      top: 13px;
+      left: 11px;
+      right: auto;
+    }
+
+    .left-panel .filter-section:first-of-type {
+      padding-right: 58px;
+    }
+
+    .detail-sheet {
+      display: grid;
+      gap: 14px;
+    }
+
+    .detail-heading {
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(185, 179, 167, 0.22);
+    }
+
+    .detail-kicker {
+      margin-top: 6px;
+      color: #b17938;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .detail-block {
+      display: grid;
+      gap: 6px;
+    }
+
+    .detail-block h3 {
+      margin: 0;
+      color: #8b8178;
+      font-size: 12px;
+      font-weight: 720;
+    }
+
+    .detail-block p {
+      margin: 0;
+      color: #51473f;
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .detail-placeholder {
+      min-height: 360px;
+      display: grid;
+      place-items: center;
+      padding: 30px;
+      text-align: center;
+      color: #a19890;
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .game-shell {
+      display: grid;
+      gap: 16px;
+    }
+
+    .game-head {
+      display: grid;
+      gap: 5px;
+    }
+
+    .game-head strong {
+      font-size: 18px;
+      line-height: 1.35;
+    }
+
+    .game-head span {
+      color: #8b8178;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .game-setup {
+      display: grid;
+      gap: 7px;
+    }
+
+    .game-setup label {
+      color: #8b8178;
+      font-size: 12px;
+      font-weight: 680;
+    }
+
+    .game-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+    }
+
+    .game-actions .primary-action {
+      min-height: 44px;
+    }
+
+    .game-dice {
+      min-height: 58px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .game-die {
+      width: 48px;
+      aspect-ratio: 1;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(74, 64, 55, 0.13);
+      border-radius: 8px;
+      background: #fffaf0;
+      color: #d87469;
+      box-shadow: 0 8px 18px rgba(74, 64, 55, 0.1);
+      font-family: "Segoe UI Symbol", "Arial Unicode MS", sans-serif;
+      font-size: 35px;
+      line-height: 1;
+    }
+
+    .game-result {
+      min-height: 92px;
+      padding: 14px;
+      border-left: 3px solid #efb15f;
+      background: rgba(255, 248, 229, 0.84);
+      color: #5b4b3c;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .game-result.win {
+      border-left-color: #6eb79c;
+      background: rgba(232, 247, 240, 0.88);
+    }
+
+    .game-result.penalty {
+      border-left-color: #d88996;
+      background: rgba(253, 236, 241, 0.88);
+    }
+
+    .game-progress {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .progress-chip {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 9px;
+      border: 1px solid rgba(74, 64, 55, 0.09);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.78);
+      color: #7a6d62;
+      font-size: 12px;
+    }
+
+    .progress-chip.done {
+      border-color: rgba(110, 183, 156, 0.44);
+      background: rgba(232, 247, 240, 0.9);
+      color: #417c67;
+    }
+
+    .game-note {
+      color: #9a9087;
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
+    @media (min-width: 761px) and (max-width: 1180px) {
+      .app {
+        height: 100%;
+        min-height: 100%;
+        grid-template-columns: 300px minmax(0, 1fr) 330px;
+        grid-template-rows: 80px minmax(0, 1fr);
+      }
+
+      .app.left-collapsed {
+        grid-template-columns: 52px minmax(0, 1fr) 330px;
+      }
+
+      .app.right-collapsed {
+        grid-template-columns: 300px minmax(0, 1fr) 52px;
+      }
+
+      .app.left-collapsed.right-collapsed {
+        grid-template-columns: 52px minmax(0, 1fr) 52px;
+      }
+
+      .left-panel {
+        grid-column: 1;
+        grid-row: 2;
+      }
+
+      .stage {
+        grid-column: 2;
+        grid-row: 2;
+      }
+
+      .side {
+        grid-column: 3;
+        grid-row: 2;
+        border-top: 0;
+        border-left: 1px solid rgba(185, 179, 167, 0.28);
+      }
+    }
+
+    @media (max-width: 760px) {
+      .app.left-collapsed,
+      .app.right-collapsed,
+      .app.left-collapsed.right-collapsed {
+        grid-template-columns: 1fr;
+      }
+
+      .app.left-collapsed .left-panel,
+      .app.right-collapsed .side {
+        min-height: 56px;
+      }
+
+      .side {
+        overflow: visible;
+      }
+
+      .side .tab-pane.active {
+        height: auto;
+        overflow: visible;
+      }
+
+      .sidebar-toggle {
+        top: 12px;
+        right: 12px;
+        left: auto;
+        width: 30px;
+        height: 32px;
+        min-height: 32px;
+        transform: none;
+      }
+
+      .left-panel .filter-section:first-of-type {
+        padding-right: 58px;
+      }
+
+      .side .tabs {
+        padding-left: 42px;
+        padding-right: 0;
+      }
+
+      .right-toggle {
+        left: 8px;
+        right: auto;
+      }
+
+      .app.left-collapsed .left-toggle,
+      .app.right-collapsed .right-toggle {
+        top: 12px;
+        right: auto;
+        left: 11px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <script id="dataset" type="application/json">{"title":"骰子令蒲公英图数据_L0-L4交互版","description":"用于蒲公英图/放射状树图的数据结构。层级为 L0 骰子令 → L1 骰子数量 → L2 酒令机制 → L3 酒令名称 → L4 维度/难度/玩法/关键词。支持点击逐层炸开、叠加展开、统计、筛选、详情和互动投掷。","dataSource":"根据《骰子令(2).docx》与前版“骰子令蒲公英图数据_精简版.json”整理。","version":"2026-06-26-l0-l4-bloom","structure":{"L0":"骰子令","L1":"骰子数量：一枚骰子、两枚骰子、三枚骰子、四枚及以上骰子","L2":"酒令机制：单点对应类、点数和对应类、组合对应类","L3":"酒令名称","L4":"维度、难度、玩法、关键词"},"difficultyRule":"低=1，中=2，高=3；按规则复杂度、是否涉及组合/累计/顺序判定进行分级。","note":"同一令目如果同时具备多种规则机制，会在不同机制分支下重复出现，便于可视化时表现机制关系。","uiDesign":{"themeName":"浅色柔和蒲公英","background":{"type":"radialGradient","colors":["#FFFDF7","#F6FAFF","#F8F1FF"],"description":"背景整体偏亮，使用米白、浅蓝、浅紫过渡，避免暗色背景造成压迫感。"},"canvas":{"padding":48,"centerGlow":"#FFF3C7","grid":"none"},"nodePalette":{"L0":"#FFE7A8","L1":"#FFD6A5","L2_single":"#F7C9D4","L2_sum":"#BFE3D0","L2_combo":"#C9D8FF","L3":"#F8C7D8","L4_dimension":"#E6F4D7","L4_difficulty":"#FDE2C5","L4_play":"#E7E0FA","L4_keywords":"#F7E9A6"},"linkStyle":{"color":"#B9B3A7","width":1.2,"opacity":0.72,"hoverWidth":2.4},"textStyle":{"fontFamily":"Source Han Sans SC, Noto Sans SC, PingFang SC, Microsoft YaHei, sans-serif","rootSize":20,"levelSize":[18,15,13,11],"color":"#4A4037"},"nodeStyle":{"shape":"circle","shadow":"soft","borderColor":"#FFFFFF","borderWidth":1.5},"legend":{"position":"right-top","items":[{"label":"单点对应类","color":"#F7C9D4"},{"label":"点数和对应类","color":"#BFE3D0"},{"label":"组合对应类","color":"#C9D8FF"},{"label":"维度","color":"#E6F4D7"},{"label":"难度","color":"#FDE2C5"},{"label":"玩法","color":"#E7E0FA"}]}},"interaction":{"initialState":{"visibleLevel":"L0","visibleNodes":["root"],"centerNode":"root","description":"初始画面只显示“骰子令”一个中心节点。"},"preservedInteractions":{"hoverTooltip":true,"clickExpand":true,"clickCollapse":false,"dragCanvas":true,"zoomCanvas":true,"pathHighlight":true,"sameCategoryHighlight":true,"detailPanelOnClick":true,"searchLocate":true,"filterDimOthers":true},"newBloomInteraction":{"name":"鼠标点击蒲公英炸开","trigger":"click","mode":"progressiveAppendBloom","appendMode":true,"collapseMode":"manualResetOnly","steps":[{"clickLevel":"L0","result":"展开 L1 骰子数量节点：一枚骰子、两枚骰子、三枚骰子、四枚及以上骰子。"},{"clickLevel":"L1","result":"在被点击的骰子数量周围继续展开 L2 酒令机制节点。"},{"clickLevel":"L2","result":"在被点击的酒令机制周围继续展开 L3 酒令名称节点。"},{"clickLevel":"L3","result":"展开 L4 维度、难度、玩法、关键词，同时打开右侧令目详情。"},{"clickLevel":"L4","result":"高亮同维度、同难度或同关键词节点，帮助观察关联。"}],"animation":{"type":"radialBurst","duration":680,"easing":"cubicOut","stagger":45,"particleEffect":{"enabled":true,"shape":"tinyCircle","color":"#FFF1BA","count":18,"fadeOut":true},"finalLayout":"largeDandelion"},"accumulationRule":"每点击一层只新增下一层节点，已展开节点保留，最终形成完整大蒲公英图。","resetButton":{"enabled":true,"label":"收回蒲公英","action":"resetToL0"}},"clickActions":{"root":"expandDiceCount","diceCount":"expandMechanism","mechanism":"expandWineOrderNames","wineOrderName":"expandAttributesAndOpenDetail","attribute":"highlightRelatedNodes"},"tooltipTemplate":{"L0":"{name}｜点击展开骰子数量","L1":"{name}｜共 {count} 条机制数据｜点击展开机制","L2":"{name}｜点击查看该机制下的令目","L3":"{name}\n维度：{dimension}\n难度：{difficulty}\n点击查看玩法详情","L4":"{name}"}},"panels":{"dimensionDistributionStatistics":{"title":"维度分布统计","chartType":"barOrRose","description":"统计 L3 酒令名称节点的维度分布，可用于侧边栏图表。","data":[{"dimension":"吉祥数字","count":3},{"dimension":"吉祥祝颂","count":3},{"dimension":"吉祥组合","count":2},{"dimension":"竞技比较","count":2},{"dimension":"节令意象","count":2},{"dimension":"人数关系","count":1},{"dimension":"人物关系","count":1},{"dimension":"人物动作","count":1},{"dimension":"伦理祝颂","count":1},{"dimension":"功名拼点","count":1},{"dimension":"功名组合","count":1},{"dimension":"功名象征","count":1},{"dimension":"功名身份","count":1},{"dimension":"奖惩触发","count":1},{"dimension":"对子组合","count":1},{"dimension":"对子连号","count":1},{"dimension":"德功才等级","count":1},{"dimension":"数量组合","count":1},{"dimension":"方位空间","count":1},{"dimension":"标准点判定","count":1},{"dimension":"猜测竞技","count":1},{"dimension":"累计组合","count":1},{"dimension":"红点累计","count":1},{"dimension":"色彩图案","count":1},{"dimension":"节令民俗","count":1},{"dimension":"节令祝寿","count":1},{"dimension":"节令组合","count":1},{"dimension":"身份角色","count":1},{"dimension":"配牌组合","count":1},{"dimension":"酒盏编号","count":1},{"dimension":"顺序目标","count":1},{"dimension":"顺序组合","count":1},{"dimension":"顺序递进","count":1},{"dimension":"颜色累计","count":1},{"dimension":"颜色组合","count":1}]},"ruleDimensionAndDifficulty":{"title":"规则维度与难度","chartType":"matrixHeatmap","description":"横向比较不同维度中的低/中/高难度数量，也可切换为机制维度统计。","dimensionDifficultyMatrix":[{"dimension":"吉祥数字","total":3,"low":0,"medium":2,"high":1,"avgDifficultyScore":2.33},{"dimension":"吉祥祝颂","total":3,"low":1,"medium":2,"high":0,"avgDifficultyScore":1.67},{"dimension":"吉祥组合","total":2,"low":0,"medium":1,"high":1,"avgDifficultyScore":2.5},{"dimension":"竞技比较","total":2,"low":0,"medium":2,"high":0,"avgDifficultyScore":2},{"dimension":"节令意象","total":2,"low":2,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"人数关系","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"人物关系","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"人物动作","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"伦理祝颂","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"功名拼点","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"功名组合","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"功名象征","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"功名身份","total":1,"low":1,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"奖惩触发","total":1,"low":1,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"对子组合","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"对子连号","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"德功才等级","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"数量组合","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"方位空间","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"标准点判定","total":1,"low":1,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"猜测竞技","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"累计组合","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"红点累计","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"色彩图案","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"节令民俗","total":1,"low":1,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"节令祝寿","total":1,"low":1,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"节令组合","total":1,"low":1,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"身份角色","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"配牌组合","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"酒盏编号","total":1,"low":1,"medium":0,"high":0,"avgDifficultyScore":1},{"dimension":"顺序目标","total":1,"low":0,"medium":1,"high":0,"avgDifficultyScore":2},{"dimension":"顺序组合","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"顺序递进","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"颜色累计","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3},{"dimension":"颜色组合","total":1,"low":0,"medium":0,"high":1,"avgDifficultyScore":3}],"mechanismDifficultySummary":[{"mechanism":"单点对应类","total":18,"difficulty":{"低":7,"中":11,"高":0},"topDimensions":[{"dimension":"吉祥祝颂","count":3},{"dimension":"节令意象","count":2},{"dimension":"酒盏编号","count":1},{"dimension":"功名身份","count":1},{"dimension":"人物动作","count":1},{"dimension":"顺序目标","count":1},{"dimension":"标准点判定","count":1},{"dimension":"人数关系","count":1}]},{"mechanism":"点数和对应类","total":11,"difficulty":{"低":2,"中":4,"高":5},"topDimensions":[{"dimension":"吉祥数字","count":3},{"dimension":"节令祝寿","count":1},{"dimension":"节令民俗","count":1},{"dimension":"猜测竞技","count":1},{"dimension":"竞技比较","count":1},{"dimension":"颜色累计","count":1},{"dimension":"功名拼点","count":1},{"dimension":"红点累计","count":1}]},{"mechanism":"组合对应类","total":13,"difficulty":{"低":1,"中":3,"高":9},"topDimensions":[{"dimension":"吉祥组合","count":2},{"dimension":"节令组合","count":1},{"dimension":"对子连号","count":1},{"dimension":"色彩图案","count":1},{"dimension":"功名组合","count":1},{"dimension":"对子组合","count":1},{"dimension":"数量组合","count":1},{"dimension":"颜色组合","count":1}]}]},"searchFilter":{"title":"检索过滤","searchPlaceholder":"输入令目名称、维度、玩法或关键词","filterMode":"multiSelectAndKeywordSearch","options":{"diceCount":[{"label":"一枚骰子","value":1,"count":9},{"label":"两枚骰子","value":2,"count":10},{"label":"三枚骰子","value":3,"count":9},{"label":"四枚及以上骰子","value":4,"count":14}],"mechanism":[{"label":"单点对应类","value":"单点对应类","count":18},{"label":"点数和对应类","value":"点数和对应类","count":11},{"label":"组合对应类","value":"组合对应类","count":13}],"dimension":[{"label":"吉祥数字","value":"吉祥数字","count":3},{"label":"吉祥祝颂","value":"吉祥祝颂","count":3},{"label":"吉祥组合","value":"吉祥组合","count":2},{"label":"竞技比较","value":"竞技比较","count":2},{"label":"节令意象","value":"节令意象","count":2},{"label":"人数关系","value":"人数关系","count":1},{"label":"人物关系","value":"人物关系","count":1},{"label":"人物动作","value":"人物动作","count":1},{"label":"伦理祝颂","value":"伦理祝颂","count":1},{"label":"功名拼点","value":"功名拼点","count":1},{"label":"功名组合","value":"功名组合","count":1},{"label":"功名象征","value":"功名象征","count":1},{"label":"功名身份","value":"功名身份","count":1},{"label":"奖惩触发","value":"奖惩触发","count":1},{"label":"对子组合","value":"对子组合","count":1},{"label":"对子连号","value":"对子连号","count":1},{"label":"德功才等级","value":"德功才等级","count":1},{"label":"数量组合","value":"数量组合","count":1},{"label":"方位空间","value":"方位空间","count":1},{"label":"标准点判定","value":"标准点判定","count":1},{"label":"猜测竞技","value":"猜测竞技","count":1},{"label":"累计组合","value":"累计组合","count":1},{"label":"红点累计","value":"红点累计","count":1},{"label":"色彩图案","value":"色彩图案","count":1},{"label":"节令民俗","value":"节令民俗","count":1},{"label":"节令祝寿","value":"节令祝寿","count":1},{"label":"节令组合","value":"节令组合","count":1},{"label":"身份角色","value":"身份角色","count":1},{"label":"配牌组合","value":"配牌组合","count":1},{"label":"酒盏编号","value":"酒盏编号","count":1},{"label":"顺序目标","value":"顺序目标","count":1},{"label":"顺序组合","value":"顺序组合","count":1},{"label":"顺序递进","value":"顺序递进","count":1},{"label":"颜色累计","value":"颜色累计","count":1},{"label":"颜色组合","value":"颜色组合","count":1}],"difficulty":[{"label":"低","value":"低","score":1,"count":10},{"label":"中","value":"中","score":2,"count":18},{"label":"高","value":"高","score":3,"count":14}],"keywords":["1-6","16点","21点","26点","4","4+5","4+5+6","5","6","七","七夕","三个1","三元","三多","三星","三色","东南西北","乞巧","买酒","五日","五福","人数","人物","人物关系","伦理","先6后1","八","公","关系","判定","判罚","功","功名","动作","十二红","单点","吉祥","命中","四","四四如意","图案","奖惩","如意","子婿","孙","孝亲","富","对子","对应","寿","帅","并头","座次","延龄","德","意象","才","拼点","排名","数量","方位","月","标准点","比大小","氛围","点将","点数和","点数对应","牙牌","状元","猜点","登科","目标点","祝寿","禄","福","科举","空间","竞技","等级","累计","红点","红点累计","组合","终局","编号","考试","节令","花灯","表演","角色","触发","贵","赶羊","身份","输赢","连号","递进","酒盏","重复","长命","长命富贵","雪","顺序","颜色"]},"actions":{"onSearch":"locateAndHighlightMatchedNodes","onFilter":"hideUnmatchedNodesButKeepPath","onClear":"restoreCurrentBloomState"}},"itemDetail":{"title":"令目详情","openTrigger":"click L3 酒令名称节点或 L4 玩法节点","fields":["name","diceLabel","mechanism","dimension","difficulty","difficultyScore","play","keywords"],"actions":["highlightPath","highlightSameDimension","highlightSameMechanism","startInteractiveRoll"]},"interactiveDiceRoll":{"title":"互动投掷","description":"可选择骰子数量后进行模拟投掷，系统根据骰子数量随机推荐一个可匹配的令目，并在蒲公英图中高亮路径。","enabled":true,"controls":{"diceCountSelect":["一枚骰子","两枚骰子","三枚骰子","四枚及以上骰子"],"rollButtonLabel":"掷一下","againButtonLabel":"再掷一次"},"animation":{"diceShake":true,"duration":900,"resultBurst":true},"matchingRule":"先按所选骰子数量筛选 L3 令目，再随机选取一个令目作为互动结果；如前端具备真实点数规则，可用 play 字段进一步匹配。","resultFields":["rollValue","matchedName","diceLabel","mechanism","dimension","difficulty","play"],"onResult":"expandPathToMatchedNodeAndOpenDetail"}},"statistics":{"totalMechanismRecords":42,"diceCountDistribution":[{"diceLabel":"一枚骰子","count":9},{"diceLabel":"两枚骰子","count":10},{"diceLabel":"三枚骰子","count":9},{"diceLabel":"四枚及以上骰子","count":14}],"mechanismDistribution":[{"mechanism":"单点对应类","count":18},{"mechanism":"点数和对应类","count":11},{"mechanism":"组合对应类","count":13}],"difficultyDistribution":[{"difficulty":"低","score":1,"count":10},{"difficulty":"中","score":2,"count":18},{"difficulty":"高","score":3,"count":14}],"dimensionDistribution":[{"dimension":"吉祥数字","count":3},{"dimension":"吉祥祝颂","count":3},{"dimension":"吉祥组合","count":2},{"dimension":"竞技比较","count":2},{"dimension":"节令意象","count":2},{"dimension":"人数关系","count":1},{"dimension":"人物关系","count":1},{"dimension":"人物动作","count":1},{"dimension":"伦理祝颂","count":1},{"dimension":"功名拼点","count":1},{"dimension":"功名组合","count":1},{"dimension":"功名象征","count":1},{"dimension":"功名身份","count":1},{"dimension":"奖惩触发","count":1},{"dimension":"对子组合","count":1},{"dimension":"对子连号","count":1},{"dimension":"德功才等级","count":1},{"dimension":"数量组合","count":1},{"dimension":"方位空间","count":1},{"dimension":"标准点判定","count":1},{"dimension":"猜测竞技","count":1},{"dimension":"累计组合","count":1},{"dimension":"红点累计","count":1},{"dimension":"色彩图案","count":1},{"dimension":"节令民俗","count":1},{"dimension":"节令祝寿","count":1},{"dimension":"节令组合","count":1},{"dimension":"身份角色","count":1},{"dimension":"配牌组合","count":1},{"dimension":"酒盏编号","count":1},{"dimension":"顺序目标","count":1},{"dimension":"顺序组合","count":1},{"dimension":"顺序递进","count":1},{"dimension":"颜色累计","count":1},{"dimension":"颜色组合","count":1}]},"filterIndex":[{"id":"d1_single_01","name":"福禄寿令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"吉祥祝颂","difficulty":"低","difficultyScore":1,"play":"掷出4、5、6时分别对应福、寿、禄。","keywords":["福","寿","禄","吉祥","单点"]},{"id":"d1_single_02","name":"遇缺即升令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"酒盏编号","difficulty":"低","difficultyScore":1,"play":"骰子点数对应酒盏编号，按所掷点数确定饮酒对象或位置。","keywords":["酒盏","编号","点数对应"]},{"id":"d1_single_03","name":"状元游街令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"功名身份","difficulty":"低","difficultyScore":1,"play":"1至5点对应不同酒盏，其中4点被设定为“状元”。","keywords":["状元","功名","酒盏","身份"]},{"id":"d1_single_04","name":"一色令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"人物动作","difficulty":"中","difficultyScore":2,"play":"不同点数分别对应不同人物与动作，掷出后按对应内容行令。","keywords":["人物","动作","表演","对应"]},{"id":"d1_single_05","name":"六顺令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"顺序目标","difficulty":"中","difficultyScore":2,"play":"按1至6的顺序设置目标点数，依次完成或判断结果。","keywords":["顺序","目标点","递进"]},{"id":"d1_single_06","name":"探花令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"标准点判定","difficulty":"低","difficultyScore":1,"play":"设定某一单点为标准点，掷出后依据是否命中来判定。","keywords":["标准点","判定","命中"]},{"id":"d1_single_07","name":"三星拱照令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"人数关系","difficulty":"中","difficultyScore":2,"play":"以3点为核心，结合上下首人数或座次关系进行行令。","keywords":["三星","座次","人数","关系"]},{"id":"d1_single_08","name":"赏月令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"节令意象","difficulty":"低","difficultyScore":1,"play":"以1点为“月”，掷出相应点数后触发赏月主题规则。","keywords":["月","节令","意象","氛围"]},{"id":"d1_single_09","name":"赏雪令","diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","dimension":"节令意象","difficulty":"低","difficultyScore":1,"play":"以6点为“雪”，掷出相应点数后触发赏雪主题规则。","keywords":["雪","节令","意象","氛围"]},{"id":"d2_single_10","name":"占风令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"单点对应类","dimension":"方位空间","difficulty":"中","difficultyScore":2,"play":"骰子点数对应东、南、西、北等方位，再按方位确定行令关系。","keywords":["方位","东南西北","空间","对应"]},{"id":"d2_single_16","name":"点将令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"单点对应类","dimension":"身份角色","difficulty":"中","difficultyScore":2,"play":"以4点为“帅”，掷出后围绕“帅”这一角色展开点将规则。","keywords":["点将","帅","身份","角色"]},{"id":"d2_single_18","name":"曹酒令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"单点对应类","dimension":"奖惩触发","difficulty":"低","difficultyScore":1,"play":"以1点为买酒点，掷出相应点数后触发买酒或饮酒规则。","keywords":["买酒","奖惩","触发","单点"]},{"id":"d2_sum_11","name":"三多五福令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","dimension":"吉祥数字","difficulty":"中","difficultyScore":2,"play":"以8点为核心点数，掷出指定点数和后触发对应规则。","keywords":["八","五福","吉祥","点数和"]},{"id":"d2_sum_12","name":"七子八婿令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","dimension":"吉祥数字","difficulty":"中","difficultyScore":2,"play":"以7点和8点为核心点数，围绕吉祥数字进行判定。","keywords":["七","八","子婿","点数和"]},{"id":"d2_sum_13","name":"五日延龄令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","dimension":"节令祝寿","difficulty":"低","difficultyScore":1,"play":"以5点为核心点数，掷出后关联延龄祝寿含义。","keywords":["五日","延龄","祝寿","点数和"]},{"id":"d2_sum_14","name":"七夕乞巧令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","dimension":"节令民俗","difficulty":"低","difficultyScore":1,"play":"以7点为核心点数，结合七夕乞巧的节令主题行令。","keywords":["七夕","乞巧","节令","点数和"]},{"id":"d2_sum_17","name":"猜点令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","dimension":"猜测竞技","difficulty":"中","difficultyScore":2,"play":"参与者预先猜测两枚骰子的点数总和，再根据实际结果判定输赢。","keywords":["猜点","点数和","竞技","输赢"]},{"id":"d2_combo_11","name":"三多五福令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"组合对应类","dimension":"吉祥组合","difficulty":"中","difficultyScore":2,"play":"以3+5、2+6、1+1、1+4等组合对应特定寓意。","keywords":["组合","三多","五福","吉祥"]},{"id":"d2_combo_15","name":"赏花灯令","diceCount":2,"diceLabel":"两枚骰子","mechanism":"组合对应类","dimension":"节令组合","difficulty":"低","difficultyScore":1,"play":"以4+5组合为核心，触发赏花灯主题规则。","keywords":["花灯","节令","4+5","组合"]},{"id":"d3_single_20","name":"赶羊令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"单点对应类","dimension":"竞技比较","difficulty":"中","difficultyScore":2,"play":"令官先定“羊数”，再根据掷出的点数情况比较大小。","keywords":["赶羊","比大小","竞技","判定"]},{"id":"d3_single_22","name":"连中三元令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"单点对应类","dimension":"功名象征","difficulty":"中","difficultyScore":2,"play":"以1点为“元”，围绕“元”的出现情况关联连中三元寓意。","keywords":["三元","功名","科举","单点"]},{"id":"d3_single_24","name":"陈氏觞政图令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"单点对应类","dimension":"德功才等级","difficulty":"中","difficultyScore":2,"play":"将4、5、6分别对应德、功、才，并据此判断行令结果。","keywords":["德","功","才","等级"]},{"id":"d3_sum_20","name":"赶羊令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"点数和对应类","dimension":"竞技比较","difficulty":"中","difficultyScore":2,"play":"比较三枚骰子的点数总和大小，用于区分胜负或先后。","keywords":["点数和","比大小","排名","竞技"]},{"id":"d3_combo_19","name":"锦团国令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","dimension":"对子连号","difficulty":"高","difficultyScore":3,"play":"依据对子以及4+5+6等特殊组合进行判定。","keywords":["对子","4+5+6","连号","组合"]},{"id":"d3_combo_21","name":"三色令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","dimension":"色彩图案","difficulty":"中","difficultyScore":2,"play":"根据骰子图案或颜色组合触发不同规则。","keywords":["颜色","图案","三色","组合"]},{"id":"d3_combo_22","name":"连中三元令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","dimension":"功名组合","difficulty":"高","difficultyScore":3,"play":"以三个1点作为关键组合，形成“连中三元”的象征。","keywords":["三个1","三元","功名","组合"]},{"id":"d3_combo_23","name":"并头运令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","dimension":"对子组合","difficulty":"中","difficultyScore":2,"play":"以对子组合为核心，出现相同点数时触发对应规则。","keywords":["对子","并头","重复","组合"]},{"id":"d3_combo_24","name":"陈氏觞政图令","diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","dimension":"数量组合","difficulty":"高","difficultyScore":3,"play":"根据4、5、6出现的数量组合判断德、功、才等结果。","keywords":["4","5","6","数量","组合"]},{"id":"d4_single_26","name":"事事如意令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"单点对应类","dimension":"吉祥祝颂","difficulty":"中","difficultyScore":2,"play":"以4点为“如意”，出现相应点数后触发祝颂含义。","keywords":["如意","四","吉祥","单点"]},{"id":"d4_single_27","name":"公领孙令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"单点对应类","dimension":"人物关系","difficulty":"中","difficultyScore":2,"play":"将6设为“公”、1设为“孙”，依据点数关系展开规则。","keywords":["公","孙","人物关系","单点"]},{"id":"d4_single_28","name":"长命富贵令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"单点对应类","dimension":"吉祥祝颂","difficulty":"中","difficultyScore":2,"play":"将4、5、6分别对应贵、富、长命，形成祝颂式判定。","keywords":["长命","富","贵","吉祥"]},{"id":"d4_sum_25","name":"朱窝令（除红谱）","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","dimension":"颜色累计","difficulty":"高","difficultyScore":3,"play":"结合红点情况与点数总和进行判罚。","keywords":["红点","点数和","判罚","累计"]},{"id":"d4_sum_26","name":"事事如意令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","dimension":"吉祥数字","difficulty":"高","difficultyScore":3,"play":"四枚骰子点数和达到16点时，对应“四四如意”。","keywords":["16点","四四如意","点数和","吉祥"]},{"id":"d4_sum_30","name":"考试令（喜报登科）","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","dimension":"功名拼点","difficulty":"高","difficultyScore":3,"play":"通过多骰拼出21点，形成“喜报登科”的科举寓意。","keywords":["21点","登科","考试","拼点"]},{"id":"d4_sum_31","name":"乌龙令（十二红）","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","dimension":"红点累计","difficulty":"高","difficultyScore":3,"play":"以红点总和达到12为核心条件。","keywords":["十二红","红点","累计","终局"]},{"id":"d4_sum_32","name":"子孝双亲令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","dimension":"伦理祝颂","difficulty":"高","difficultyScore":3,"play":"以26点为核心点数，围绕“子孝双亲”的伦理寓意展开。","keywords":["26点","孝亲","伦理","点数和"]},{"id":"d4_combo_25","name":"朱窝令（除红谱）","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","dimension":"颜色组合","difficulty":"高","difficultyScore":3,"play":"根据红点数量组合进行判定或判罚。","keywords":["红点","数量","颜色","组合"]},{"id":"d4_combo_27","name":"公领孙令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","dimension":"顺序组合","difficulty":"高","difficultyScore":3,"play":"要求先出6再出1，形成“公领孙”的顺序关系。","keywords":["先6后1","顺序","人物关系","组合"]},{"id":"d4_combo_28","name":"长命富贵令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","dimension":"吉祥组合","difficulty":"高","difficultyScore":3,"play":"以4、5、6组合共同构成长命、富贵等祝颂含义。","keywords":["4","5","6","长命富贵","组合"]},{"id":"d4_combo_29","name":"一路功名到白头令","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","dimension":"顺序递进","difficulty":"高","difficultyScore":3,"play":"以1至6的顺序组合为核心，形成由低到高的功名递进。","keywords":["1-6","顺序","功名","递进"]},{"id":"d4_combo_30","name":"考试令（喜报登科）","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","dimension":"配牌组合","difficulty":"高","difficultyScore":3,"play":"将骰子点数组合与牙牌规则相配合，完成登科主题玩法。","keywords":["牙牌","考试","组合","登科"]},{"id":"d4_combo_31","name":"乌龙令（十二红）","diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","dimension":"累计组合","difficulty":"高","difficultyScore":3,"play":"通过红点累计组合达成十二红条件。","keywords":["红点累计","十二红","终局","组合"]}],"root":{"id":"root","level":"L0","name":"骰子令","type":"主题中心","summary":"围绕骰子数量、酒令机制、酒令名称与规则属性展开的蒲公英式可视化数据。","visual":{"nodeColor":"#F7F3E8","nodeSize":46,"ring":"中心"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L1","appendMode":true},"children":[{"id":"dice_1","level":"L1","name":"一枚骰子","type":"骰子数量","diceCount":1,"summary":"单骰玩法规则较直接，常以固定点数对应身份、动作、节令意象或奖惩结果。","visual":{"nodeColor":"#FFE7BA","nodeSize":34,"ring":"第一圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L2","appendMode":true},"children":[{"id":"dice_1_single","level":"L2","name":"单点对应类","type":"酒令机制","summary":"以某一个固定点数作为核心判定条件。","visual":{"nodeColor":"#F7C9D4","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d1_single_01","level":"L3","name":"福禄寿令","type":"酒令名称","dimension":"吉祥祝颂","difficulty":"低","difficultyScore":1,"play":"掷出4、5、6时分别对应福、寿、禄。","keywords":["福","寿","禄","吉祥","单点"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_01_dimension","level":"L4","name":"维度：吉祥祝颂","type":"维度","value":"吉祥祝颂","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_01_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_01_play","level":"L4","name":"玩法：掷出4、5、6时分别对应福、寿、禄。","type":"玩法","value":"掷出4、5、6时分别对应福、寿、禄。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_01_keywords","level":"L4","name":"关键词：福、寿、禄、吉祥、单点","type":"关键词","value":["福","寿","禄","吉祥","单点"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_02","level":"L3","name":"遇缺即升令","type":"酒令名称","dimension":"酒盏编号","difficulty":"低","difficultyScore":1,"play":"骰子点数对应酒盏编号，按所掷点数确定饮酒对象或位置。","keywords":["酒盏","编号","点数对应"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_02_dimension","level":"L4","name":"维度：酒盏编号","type":"维度","value":"酒盏编号","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_02_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_02_play","level":"L4","name":"玩法：骰子点数对应酒盏编号，按所掷点数确定饮酒对象或位置。","type":"玩法","value":"骰子点数对应酒盏编号，按所掷点数确定饮酒对象或位置。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_02_keywords","level":"L4","name":"关键词：酒盏、编号、点数对应","type":"关键词","value":["酒盏","编号","点数对应"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_03","level":"L3","name":"状元游街令","type":"酒令名称","dimension":"功名身份","difficulty":"低","difficultyScore":1,"play":"1至5点对应不同酒盏，其中4点被设定为“状元”。","keywords":["状元","功名","酒盏","身份"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_03_dimension","level":"L4","name":"维度：功名身份","type":"维度","value":"功名身份","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_03_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_03_play","level":"L4","name":"玩法：1至5点对应不同酒盏，其中4点被设定为“状元”。","type":"玩法","value":"1至5点对应不同酒盏，其中4点被设定为“状元”。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_03_keywords","level":"L4","name":"关键词：状元、功名、酒盏、身份","type":"关键词","value":["状元","功名","酒盏","身份"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_04","level":"L3","name":"一色令","type":"酒令名称","dimension":"人物动作","difficulty":"中","difficultyScore":2,"play":"不同点数分别对应不同人物与动作，掷出后按对应内容行令。","keywords":["人物","动作","表演","对应"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_04_dimension","level":"L4","name":"维度：人物动作","type":"维度","value":"人物动作","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_04_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_04_play","level":"L4","name":"玩法：不同点数分别对应不同人物与动作，掷出后按对应内容行令。","type":"玩法","value":"不同点数分别对应不同人物与动作，掷出后按对应内容行令。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_04_keywords","level":"L4","name":"关键词：人物、动作、表演、对应","type":"关键词","value":["人物","动作","表演","对应"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_05","level":"L3","name":"六顺令","type":"酒令名称","dimension":"顺序目标","difficulty":"中","difficultyScore":2,"play":"按1至6的顺序设置目标点数，依次完成或判断结果。","keywords":["顺序","目标点","递进"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_05_dimension","level":"L4","name":"维度：顺序目标","type":"维度","value":"顺序目标","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_05_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_05_play","level":"L4","name":"玩法：按1至6的顺序设置目标点数，依次完成或判断结果。","type":"玩法","value":"按1至6的顺序设置目标点数，依次完成或判断结果。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_05_keywords","level":"L4","name":"关键词：顺序、目标点、递进","type":"关键词","value":["顺序","目标点","递进"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_06","level":"L3","name":"探花令","type":"酒令名称","dimension":"标准点判定","difficulty":"低","difficultyScore":1,"play":"设定某一单点为标准点，掷出后依据是否命中来判定。","keywords":["标准点","判定","命中"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_06_dimension","level":"L4","name":"维度：标准点判定","type":"维度","value":"标准点判定","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_06_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_06_play","level":"L4","name":"玩法：设定某一单点为标准点，掷出后依据是否命中来判定。","type":"玩法","value":"设定某一单点为标准点，掷出后依据是否命中来判定。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_06_keywords","level":"L4","name":"关键词：标准点、判定、命中","type":"关键词","value":["标准点","判定","命中"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_07","level":"L3","name":"三星拱照令","type":"酒令名称","dimension":"人数关系","difficulty":"中","difficultyScore":2,"play":"以3点为核心，结合上下首人数或座次关系进行行令。","keywords":["三星","座次","人数","关系"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_07_dimension","level":"L4","name":"维度：人数关系","type":"维度","value":"人数关系","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_07_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_07_play","level":"L4","name":"玩法：以3点为核心，结合上下首人数或座次关系进行行令。","type":"玩法","value":"以3点为核心，结合上下首人数或座次关系进行行令。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_07_keywords","level":"L4","name":"关键词：三星、座次、人数、关系","type":"关键词","value":["三星","座次","人数","关系"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_08","level":"L3","name":"赏月令","type":"酒令名称","dimension":"节令意象","difficulty":"低","difficultyScore":1,"play":"以1点为“月”，掷出相应点数后触发赏月主题规则。","keywords":["月","节令","意象","氛围"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_08_dimension","level":"L4","name":"维度：节令意象","type":"维度","value":"节令意象","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_08_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_08_play","level":"L4","name":"玩法：以1点为“月”，掷出相应点数后触发赏月主题规则。","type":"玩法","value":"以1点为“月”，掷出相应点数后触发赏月主题规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_08_keywords","level":"L4","name":"关键词：月、节令、意象、氛围","type":"关键词","value":["月","节令","意象","氛围"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d1_single_09","level":"L3","name":"赏雪令","type":"酒令名称","dimension":"节令意象","difficulty":"低","difficultyScore":1,"play":"以6点为“雪”，掷出相应点数后触发赏雪主题规则。","keywords":["雪","节令","意象","氛围"],"diceCount":1,"diceLabel":"一枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d1_single_09_dimension","level":"L4","name":"维度：节令意象","type":"维度","value":"节令意象","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d1_single_09_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d1_single_09_play","level":"L4","name":"玩法：以6点为“雪”，掷出相应点数后触发赏雪主题规则。","type":"玩法","value":"以6点为“雪”，掷出相应点数后触发赏雪主题规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d1_single_09_keywords","level":"L4","name":"关键词：雪、节令、意象、氛围","type":"关键词","value":["雪","节令","意象","氛围"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]}]},{"id":"dice_2","level":"L1","name":"两枚骰子","type":"骰子数量","diceCount":2,"summary":"双骰玩法开始出现点数和、特殊组合与角色方位对应，互动性比单骰更强。","visual":{"nodeColor":"#FFE7BA","nodeSize":34,"ring":"第一圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L2","appendMode":true},"children":[{"id":"dice_2_single","level":"L2","name":"单点对应类","type":"酒令机制","summary":"以某一特殊点数作为身份、方位或奖惩触发点。","visual":{"nodeColor":"#F7C9D4","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d2_single_10","level":"L3","name":"占风令","type":"酒令名称","dimension":"方位空间","difficulty":"中","difficultyScore":2,"play":"骰子点数对应东、南、西、北等方位，再按方位确定行令关系。","keywords":["方位","东南西北","空间","对应"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_single_10_dimension","level":"L4","name":"维度：方位空间","type":"维度","value":"方位空间","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_single_10_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_single_10_play","level":"L4","name":"玩法：骰子点数对应东、南、西、北等方位，再按方位确定行令关系。","type":"玩法","value":"骰子点数对应东、南、西、北等方位，再按方位确定行令关系。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_single_10_keywords","level":"L4","name":"关键词：方位、东南西北、空间、对应","type":"关键词","value":["方位","东南西北","空间","对应"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d2_single_16","level":"L3","name":"点将令","type":"酒令名称","dimension":"身份角色","difficulty":"中","difficultyScore":2,"play":"以4点为“帅”，掷出后围绕“帅”这一角色展开点将规则。","keywords":["点将","帅","身份","角色"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_single_16_dimension","level":"L4","name":"维度：身份角色","type":"维度","value":"身份角色","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_single_16_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_single_16_play","level":"L4","name":"玩法：以4点为“帅”，掷出后围绕“帅”这一角色展开点将规则。","type":"玩法","value":"以4点为“帅”，掷出后围绕“帅”这一角色展开点将规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_single_16_keywords","level":"L4","name":"关键词：点将、帅、身份、角色","type":"关键词","value":["点将","帅","身份","角色"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d2_single_18","level":"L3","name":"曹酒令","type":"酒令名称","dimension":"奖惩触发","difficulty":"低","difficultyScore":1,"play":"以1点为买酒点，掷出相应点数后触发买酒或饮酒规则。","keywords":["买酒","奖惩","触发","单点"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_single_18_dimension","level":"L4","name":"维度：奖惩触发","type":"维度","value":"奖惩触发","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_single_18_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_single_18_play","level":"L4","name":"玩法：以1点为买酒点，掷出相应点数后触发买酒或饮酒规则。","type":"玩法","value":"以1点为买酒点，掷出相应点数后触发买酒或饮酒规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_single_18_keywords","level":"L4","name":"关键词：买酒、奖惩、触发、单点","type":"关键词","value":["买酒","奖惩","触发","单点"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]},{"id":"dice_2_sum","level":"L2","name":"点数和对应类","type":"酒令机制","summary":"以两枚骰子的总和作为主要判定依据。","visual":{"nodeColor":"#BFE3D0","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d2_sum_11","level":"L3","name":"三多五福令","type":"酒令名称","dimension":"吉祥数字","difficulty":"中","difficultyScore":2,"play":"以8点为核心点数，掷出指定点数和后触发对应规则。","keywords":["八","五福","吉祥","点数和"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_sum_11_dimension","level":"L4","name":"维度：吉祥数字","type":"维度","value":"吉祥数字","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_sum_11_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_sum_11_play","level":"L4","name":"玩法：以8点为核心点数，掷出指定点数和后触发对应规则。","type":"玩法","value":"以8点为核心点数，掷出指定点数和后触发对应规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_sum_11_keywords","level":"L4","name":"关键词：八、五福、吉祥、点数和","type":"关键词","value":["八","五福","吉祥","点数和"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d2_sum_12","level":"L3","name":"七子八婿令","type":"酒令名称","dimension":"吉祥数字","difficulty":"中","difficultyScore":2,"play":"以7点和8点为核心点数，围绕吉祥数字进行判定。","keywords":["七","八","子婿","点数和"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_sum_12_dimension","level":"L4","name":"维度：吉祥数字","type":"维度","value":"吉祥数字","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_sum_12_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_sum_12_play","level":"L4","name":"玩法：以7点和8点为核心点数，围绕吉祥数字进行判定。","type":"玩法","value":"以7点和8点为核心点数，围绕吉祥数字进行判定。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_sum_12_keywords","level":"L4","name":"关键词：七、八、子婿、点数和","type":"关键词","value":["七","八","子婿","点数和"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d2_sum_13","level":"L3","name":"五日延龄令","type":"酒令名称","dimension":"节令祝寿","difficulty":"低","difficultyScore":1,"play":"以5点为核心点数，掷出后关联延龄祝寿含义。","keywords":["五日","延龄","祝寿","点数和"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_sum_13_dimension","level":"L4","name":"维度：节令祝寿","type":"维度","value":"节令祝寿","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_sum_13_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_sum_13_play","level":"L4","name":"玩法：以5点为核心点数，掷出后关联延龄祝寿含义。","type":"玩法","value":"以5点为核心点数，掷出后关联延龄祝寿含义。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_sum_13_keywords","level":"L4","name":"关键词：五日、延龄、祝寿、点数和","type":"关键词","value":["五日","延龄","祝寿","点数和"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d2_sum_14","level":"L3","name":"七夕乞巧令","type":"酒令名称","dimension":"节令民俗","difficulty":"低","difficultyScore":1,"play":"以7点为核心点数，结合七夕乞巧的节令主题行令。","keywords":["七夕","乞巧","节令","点数和"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_sum_14_dimension","level":"L4","name":"维度：节令民俗","type":"维度","value":"节令民俗","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_sum_14_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_sum_14_play","level":"L4","name":"玩法：以7点为核心点数，结合七夕乞巧的节令主题行令。","type":"玩法","value":"以7点为核心点数，结合七夕乞巧的节令主题行令。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_sum_14_keywords","level":"L4","name":"关键词：七夕、乞巧、节令、点数和","type":"关键词","value":["七夕","乞巧","节令","点数和"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d2_sum_17","level":"L3","name":"猜点令","type":"酒令名称","dimension":"猜测竞技","difficulty":"中","difficultyScore":2,"play":"参与者预先猜测两枚骰子的点数总和，再根据实际结果判定输赢。","keywords":["猜点","点数和","竞技","输赢"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_sum_17_dimension","level":"L4","name":"维度：猜测竞技","type":"维度","value":"猜测竞技","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_sum_17_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_sum_17_play","level":"L4","name":"玩法：参与者预先猜测两枚骰子的点数总和，再根据实际结果判定输赢。","type":"玩法","value":"参与者预先猜测两枚骰子的点数总和，再根据实际结果判定输赢。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_sum_17_keywords","level":"L4","name":"关键词：猜点、点数和、竞技、输赢","type":"关键词","value":["猜点","点数和","竞技","输赢"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]},{"id":"dice_2_combo","level":"L2","name":"组合对应类","type":"酒令机制","summary":"关注两枚骰子的特殊点数组合，而不只看总和。","visual":{"nodeColor":"#C9D8FF","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d2_combo_11","level":"L3","name":"三多五福令","type":"酒令名称","dimension":"吉祥组合","difficulty":"中","difficultyScore":2,"play":"以3+5、2+6、1+1、1+4等组合对应特定寓意。","keywords":["组合","三多","五福","吉祥"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_combo_11_dimension","level":"L4","name":"维度：吉祥组合","type":"维度","value":"吉祥组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_combo_11_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_combo_11_play","level":"L4","name":"玩法：以3+5、2+6、1+1、1+4等组合对应特定寓意。","type":"玩法","value":"以3+5、2+6、1+1、1+4等组合对应特定寓意。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_combo_11_keywords","level":"L4","name":"关键词：组合、三多、五福、吉祥","type":"关键词","value":["组合","三多","五福","吉祥"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d2_combo_15","level":"L3","name":"赏花灯令","type":"酒令名称","dimension":"节令组合","difficulty":"低","difficultyScore":1,"play":"以4+5组合为核心，触发赏花灯主题规则。","keywords":["花灯","节令","4+5","组合"],"diceCount":2,"diceLabel":"两枚骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d2_combo_15_dimension","level":"L4","name":"维度：节令组合","type":"维度","value":"节令组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d2_combo_15_difficulty","level":"L4","name":"难度：低","type":"难度","value":"低","score":1,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d2_combo_15_play","level":"L4","name":"玩法：以4+5组合为核心，触发赏花灯主题规则。","type":"玩法","value":"以4+5组合为核心，触发赏花灯主题规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d2_combo_15_keywords","level":"L4","name":"关键词：花灯、节令、4+5、组合","type":"关键词","value":["花灯","节令","4+5","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]}]},{"id":"dice_3","level":"L1","name":"三枚骰子","type":"骰子数量","diceCount":3,"summary":"三骰玩法兼具点数、总和与组合判断，常出现功名、等级、对子、颜色等复合含义。","visual":{"nodeColor":"#FFE7BA","nodeSize":34,"ring":"第一圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L2","appendMode":true},"children":[{"id":"dice_3_single","level":"L2","name":"单点对应类","type":"酒令机制","summary":"特定点数承载功名、等级、身份等象征意义。","visual":{"nodeColor":"#F7C9D4","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d3_single_20","level":"L3","name":"赶羊令","type":"酒令名称","dimension":"竞技比较","difficulty":"中","difficultyScore":2,"play":"令官先定“羊数”，再根据掷出的点数情况比较大小。","keywords":["赶羊","比大小","竞技","判定"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_single_20_dimension","level":"L4","name":"维度：竞技比较","type":"维度","value":"竞技比较","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_single_20_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_single_20_play","level":"L4","name":"玩法：令官先定“羊数”，再根据掷出的点数情况比较大小。","type":"玩法","value":"令官先定“羊数”，再根据掷出的点数情况比较大小。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_single_20_keywords","level":"L4","name":"关键词：赶羊、比大小、竞技、判定","type":"关键词","value":["赶羊","比大小","竞技","判定"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d3_single_22","level":"L3","name":"连中三元令","type":"酒令名称","dimension":"功名象征","difficulty":"中","difficultyScore":2,"play":"以1点为“元”，围绕“元”的出现情况关联连中三元寓意。","keywords":["三元","功名","科举","单点"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_single_22_dimension","level":"L4","name":"维度：功名象征","type":"维度","value":"功名象征","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_single_22_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_single_22_play","level":"L4","name":"玩法：以1点为“元”，围绕“元”的出现情况关联连中三元寓意。","type":"玩法","value":"以1点为“元”，围绕“元”的出现情况关联连中三元寓意。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_single_22_keywords","level":"L4","name":"关键词：三元、功名、科举、单点","type":"关键词","value":["三元","功名","科举","单点"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d3_single_24","level":"L3","name":"陈氏觞政图令","type":"酒令名称","dimension":"德功才等级","difficulty":"中","difficultyScore":2,"play":"将4、5、6分别对应德、功、才，并据此判断行令结果。","keywords":["德","功","才","等级"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_single_24_dimension","level":"L4","name":"维度：德功才等级","type":"维度","value":"德功才等级","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_single_24_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_single_24_play","level":"L4","name":"玩法：将4、5、6分别对应德、功、才，并据此判断行令结果。","type":"玩法","value":"将4、5、6分别对应德、功、才，并据此判断行令结果。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_single_24_keywords","level":"L4","name":"关键词：德、功、才、等级","type":"关键词","value":["德","功","才","等级"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]},{"id":"dice_3_sum","level":"L2","name":"点数和对应类","type":"酒令机制","summary":"以三枚骰子的点数总和进行大小比较或排名。","visual":{"nodeColor":"#BFE3D0","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d3_sum_20","level":"L3","name":"赶羊令","type":"酒令名称","dimension":"竞技比较","difficulty":"中","difficultyScore":2,"play":"比较三枚骰子的点数总和大小，用于区分胜负或先后。","keywords":["点数和","比大小","排名","竞技"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_sum_20_dimension","level":"L4","name":"维度：竞技比较","type":"维度","value":"竞技比较","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_sum_20_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_sum_20_play","level":"L4","name":"玩法：比较三枚骰子的点数总和大小，用于区分胜负或先后。","type":"玩法","value":"比较三枚骰子的点数总和大小，用于区分胜负或先后。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_sum_20_keywords","level":"L4","name":"关键词：点数和、比大小、排名、竞技","type":"关键词","value":["点数和","比大小","排名","竞技"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]},{"id":"dice_3_combo","level":"L2","name":"组合对应类","type":"酒令机制","summary":"关注对子、连号、颜色或数量组合，规则趣味明显增强。","visual":{"nodeColor":"#C9D8FF","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d3_combo_19","level":"L3","name":"锦团国令","type":"酒令名称","dimension":"对子连号","difficulty":"高","difficultyScore":3,"play":"依据对子以及4+5+6等特殊组合进行判定。","keywords":["对子","4+5+6","连号","组合"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_combo_19_dimension","level":"L4","name":"维度：对子连号","type":"维度","value":"对子连号","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_combo_19_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_combo_19_play","level":"L4","name":"玩法：依据对子以及4+5+6等特殊组合进行判定。","type":"玩法","value":"依据对子以及4+5+6等特殊组合进行判定。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_combo_19_keywords","level":"L4","name":"关键词：对子、4+5+6、连号、组合","type":"关键词","value":["对子","4+5+6","连号","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d3_combo_21","level":"L3","name":"三色令","type":"酒令名称","dimension":"色彩图案","difficulty":"中","difficultyScore":2,"play":"根据骰子图案或颜色组合触发不同规则。","keywords":["颜色","图案","三色","组合"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_combo_21_dimension","level":"L4","name":"维度：色彩图案","type":"维度","value":"色彩图案","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_combo_21_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_combo_21_play","level":"L4","name":"玩法：根据骰子图案或颜色组合触发不同规则。","type":"玩法","value":"根据骰子图案或颜色组合触发不同规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_combo_21_keywords","level":"L4","name":"关键词：颜色、图案、三色、组合","type":"关键词","value":["颜色","图案","三色","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d3_combo_22","level":"L3","name":"连中三元令","type":"酒令名称","dimension":"功名组合","difficulty":"高","difficultyScore":3,"play":"以三个1点作为关键组合，形成“连中三元”的象征。","keywords":["三个1","三元","功名","组合"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_combo_22_dimension","level":"L4","name":"维度：功名组合","type":"维度","value":"功名组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_combo_22_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_combo_22_play","level":"L4","name":"玩法：以三个1点作为关键组合，形成“连中三元”的象征。","type":"玩法","value":"以三个1点作为关键组合，形成“连中三元”的象征。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_combo_22_keywords","level":"L4","name":"关键词：三个1、三元、功名、组合","type":"关键词","value":["三个1","三元","功名","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d3_combo_23","level":"L3","name":"并头运令","type":"酒令名称","dimension":"对子组合","difficulty":"中","difficultyScore":2,"play":"以对子组合为核心，出现相同点数时触发对应规则。","keywords":["对子","并头","重复","组合"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_combo_23_dimension","level":"L4","name":"维度：对子组合","type":"维度","value":"对子组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_combo_23_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_combo_23_play","level":"L4","name":"玩法：以对子组合为核心，出现相同点数时触发对应规则。","type":"玩法","value":"以对子组合为核心，出现相同点数时触发对应规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_combo_23_keywords","level":"L4","name":"关键词：对子、并头、重复、组合","type":"关键词","value":["对子","并头","重复","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d3_combo_24","level":"L3","name":"陈氏觞政图令","type":"酒令名称","dimension":"数量组合","difficulty":"高","difficultyScore":3,"play":"根据4、5、6出现的数量组合判断德、功、才等结果。","keywords":["4","5","6","数量","组合"],"diceCount":3,"diceLabel":"三枚骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d3_combo_24_dimension","level":"L4","name":"维度：数量组合","type":"维度","value":"数量组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d3_combo_24_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d3_combo_24_play","level":"L4","name":"玩法：根据4、5、6出现的数量组合判断德、功、才等结果。","type":"玩法","value":"根据4、5、6出现的数量组合判断德、功、才等结果。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d3_combo_24_keywords","level":"L4","name":"关键词：4、5、6、数量、组合","type":"关键词","value":["4","5","6","数量","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]}]},{"id":"dice_4_plus","level":"L1","name":"四枚及以上骰子","type":"骰子数量","diceCount":4,"summary":"多骰玩法规则最复杂，常出现累计、顺序、颜色、终局条件和博戏化倾向。","visual":{"nodeColor":"#FFE7BA","nodeSize":34,"ring":"第一圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L2","appendMode":true},"children":[{"id":"dice_4_plus_single","level":"L2","name":"单点对应类","type":"酒令机制","summary":"固定点数承载吉祥、身份或人物关系等象征意义。","visual":{"nodeColor":"#F7C9D4","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d4_single_26","level":"L3","name":"事事如意令","type":"酒令名称","dimension":"吉祥祝颂","difficulty":"中","difficultyScore":2,"play":"以4点为“如意”，出现相应点数后触发祝颂含义。","keywords":["如意","四","吉祥","单点"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_single_26_dimension","level":"L4","name":"维度：吉祥祝颂","type":"维度","value":"吉祥祝颂","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_single_26_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_single_26_play","level":"L4","name":"玩法：以4点为“如意”，出现相应点数后触发祝颂含义。","type":"玩法","value":"以4点为“如意”，出现相应点数后触发祝颂含义。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_single_26_keywords","level":"L4","name":"关键词：如意、四、吉祥、单点","type":"关键词","value":["如意","四","吉祥","单点"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_single_27","level":"L3","name":"公领孙令","type":"酒令名称","dimension":"人物关系","difficulty":"中","difficultyScore":2,"play":"将6设为“公”、1设为“孙”，依据点数关系展开规则。","keywords":["公","孙","人物关系","单点"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_single_27_dimension","level":"L4","name":"维度：人物关系","type":"维度","value":"人物关系","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_single_27_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_single_27_play","level":"L4","name":"玩法：将6设为“公”、1设为“孙”，依据点数关系展开规则。","type":"玩法","value":"将6设为“公”、1设为“孙”，依据点数关系展开规则。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_single_27_keywords","level":"L4","name":"关键词：公、孙、人物关系、单点","type":"关键词","value":["公","孙","人物关系","单点"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_single_28","level":"L3","name":"长命富贵令","type":"酒令名称","dimension":"吉祥祝颂","difficulty":"中","difficultyScore":2,"play":"将4、5、6分别对应贵、富、长命，形成祝颂式判定。","keywords":["长命","富","贵","吉祥"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"单点对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_single_28_dimension","level":"L4","name":"维度：吉祥祝颂","type":"维度","value":"吉祥祝颂","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_single_28_difficulty","level":"L4","name":"难度：中","type":"难度","value":"中","score":2,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_single_28_play","level":"L4","name":"玩法：将4、5、6分别对应贵、富、长命，形成祝颂式判定。","type":"玩法","value":"将4、5、6分别对应贵、富、长命，形成祝颂式判定。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_single_28_keywords","level":"L4","name":"关键词：长命、富、贵、吉祥","type":"关键词","value":["长命","富","贵","吉祥"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]},{"id":"dice_4_plus_sum","level":"L2","name":"点数和对应类","type":"酒令机制","summary":"以多枚骰子的总和、累计值或目标点数作为判定核心。","visual":{"nodeColor":"#BFE3D0","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d4_sum_25","level":"L3","name":"朱窝令（除红谱）","type":"酒令名称","dimension":"颜色累计","difficulty":"高","difficultyScore":3,"play":"结合红点情况与点数总和进行判罚。","keywords":["红点","点数和","判罚","累计"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_sum_25_dimension","level":"L4","name":"维度：颜色累计","type":"维度","value":"颜色累计","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_sum_25_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_sum_25_play","level":"L4","name":"玩法：结合红点情况与点数总和进行判罚。","type":"玩法","value":"结合红点情况与点数总和进行判罚。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_sum_25_keywords","level":"L4","name":"关键词：红点、点数和、判罚、累计","type":"关键词","value":["红点","点数和","判罚","累计"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_sum_26","level":"L3","name":"事事如意令","type":"酒令名称","dimension":"吉祥数字","difficulty":"高","difficultyScore":3,"play":"四枚骰子点数和达到16点时，对应“四四如意”。","keywords":["16点","四四如意","点数和","吉祥"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_sum_26_dimension","level":"L4","name":"维度：吉祥数字","type":"维度","value":"吉祥数字","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_sum_26_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_sum_26_play","level":"L4","name":"玩法：四枚骰子点数和达到16点时，对应“四四如意”。","type":"玩法","value":"四枚骰子点数和达到16点时，对应“四四如意”。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_sum_26_keywords","level":"L4","name":"关键词：16点、四四如意、点数和、吉祥","type":"关键词","value":["16点","四四如意","点数和","吉祥"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_sum_30","level":"L3","name":"考试令（喜报登科）","type":"酒令名称","dimension":"功名拼点","difficulty":"高","difficultyScore":3,"play":"通过多骰拼出21点，形成“喜报登科”的科举寓意。","keywords":["21点","登科","考试","拼点"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_sum_30_dimension","level":"L4","name":"维度：功名拼点","type":"维度","value":"功名拼点","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_sum_30_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_sum_30_play","level":"L4","name":"玩法：通过多骰拼出21点，形成“喜报登科”的科举寓意。","type":"玩法","value":"通过多骰拼出21点，形成“喜报登科”的科举寓意。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_sum_30_keywords","level":"L4","name":"关键词：21点、登科、考试、拼点","type":"关键词","value":["21点","登科","考试","拼点"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_sum_31","level":"L3","name":"乌龙令（十二红）","type":"酒令名称","dimension":"红点累计","difficulty":"高","difficultyScore":3,"play":"以红点总和达到12为核心条件。","keywords":["十二红","红点","累计","终局"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_sum_31_dimension","level":"L4","name":"维度：红点累计","type":"维度","value":"红点累计","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_sum_31_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_sum_31_play","level":"L4","name":"玩法：以红点总和达到12为核心条件。","type":"玩法","value":"以红点总和达到12为核心条件。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_sum_31_keywords","level":"L4","name":"关键词：十二红、红点、累计、终局","type":"关键词","value":["十二红","红点","累计","终局"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_sum_32","level":"L3","name":"子孝双亲令","type":"酒令名称","dimension":"伦理祝颂","difficulty":"高","difficultyScore":3,"play":"以26点为核心点数，围绕“子孝双亲”的伦理寓意展开。","keywords":["26点","孝亲","伦理","点数和"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"点数和对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_sum_32_dimension","level":"L4","name":"维度：伦理祝颂","type":"维度","value":"伦理祝颂","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_sum_32_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_sum_32_play","level":"L4","name":"玩法：以26点为核心点数，围绕“子孝双亲”的伦理寓意展开。","type":"玩法","value":"以26点为核心点数，围绕“子孝双亲”的伦理寓意展开。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_sum_32_keywords","level":"L4","name":"关键词：26点、孝亲、伦理、点数和","type":"关键词","value":["26点","孝亲","伦理","点数和"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]},{"id":"dice_4_plus_combo","level":"L2","name":"组合对应类","type":"酒令机制","summary":"强调顺序、颜色、累计、配牌和特殊排列，博戏化倾向最明显。","visual":{"nodeColor":"#C9D8FF","nodeSize":28,"ring":"第二圈"},"interaction":{"clickAction":"expandNextLayer","targetLevel":"L3","appendMode":true},"children":[{"id":"d4_combo_25","level":"L3","name":"朱窝令（除红谱）","type":"酒令名称","dimension":"颜色组合","difficulty":"高","difficultyScore":3,"play":"根据红点数量组合进行判定或判罚。","keywords":["红点","数量","颜色","组合"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_combo_25_dimension","level":"L4","name":"维度：颜色组合","type":"维度","value":"颜色组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_combo_25_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_combo_25_play","level":"L4","name":"玩法：根据红点数量组合进行判定或判罚。","type":"玩法","value":"根据红点数量组合进行判定或判罚。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_combo_25_keywords","level":"L4","name":"关键词：红点、数量、颜色、组合","type":"关键词","value":["红点","数量","颜色","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_combo_27","level":"L3","name":"公领孙令","type":"酒令名称","dimension":"顺序组合","difficulty":"高","difficultyScore":3,"play":"要求先出6再出1，形成“公领孙”的顺序关系。","keywords":["先6后1","顺序","人物关系","组合"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_combo_27_dimension","level":"L4","name":"维度：顺序组合","type":"维度","value":"顺序组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_combo_27_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_combo_27_play","level":"L4","name":"玩法：要求先出6再出1，形成“公领孙”的顺序关系。","type":"玩法","value":"要求先出6再出1，形成“公领孙”的顺序关系。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_combo_27_keywords","level":"L4","name":"关键词：先6后1、顺序、人物关系、组合","type":"关键词","value":["先6后1","顺序","人物关系","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_combo_28","level":"L3","name":"长命富贵令","type":"酒令名称","dimension":"吉祥组合","difficulty":"高","difficultyScore":3,"play":"以4、5、6组合共同构成长命、富贵等祝颂含义。","keywords":["4","5","6","长命富贵","组合"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_combo_28_dimension","level":"L4","name":"维度：吉祥组合","type":"维度","value":"吉祥组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_combo_28_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_combo_28_play","level":"L4","name":"玩法：以4、5、6组合共同构成长命、富贵等祝颂含义。","type":"玩法","value":"以4、5、6组合共同构成长命、富贵等祝颂含义。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_combo_28_keywords","level":"L4","name":"关键词：4、5、6、长命富贵、组合","type":"关键词","value":["4","5","6","长命富贵","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_combo_29","level":"L3","name":"一路功名到白头令","type":"酒令名称","dimension":"顺序递进","difficulty":"高","difficultyScore":3,"play":"以1至6的顺序组合为核心，形成由低到高的功名递进。","keywords":["1-6","顺序","功名","递进"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_combo_29_dimension","level":"L4","name":"维度：顺序递进","type":"维度","value":"顺序递进","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_combo_29_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_combo_29_play","level":"L4","name":"玩法：以1至6的顺序组合为核心，形成由低到高的功名递进。","type":"玩法","value":"以1至6的顺序组合为核心，形成由低到高的功名递进。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_combo_29_keywords","level":"L4","name":"关键词：1-6、顺序、功名、递进","type":"关键词","value":["1-6","顺序","功名","递进"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_combo_30","level":"L3","name":"考试令（喜报登科）","type":"酒令名称","dimension":"配牌组合","difficulty":"高","difficultyScore":3,"play":"将骰子点数组合与牙牌规则相配合，完成登科主题玩法。","keywords":["牙牌","考试","组合","登科"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_combo_30_dimension","level":"L4","name":"维度：配牌组合","type":"维度","value":"配牌组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_combo_30_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_combo_30_play","level":"L4","name":"玩法：将骰子点数组合与牙牌规则相配合，完成登科主题玩法。","type":"玩法","value":"将骰子点数组合与牙牌规则相配合，完成登科主题玩法。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_combo_30_keywords","level":"L4","name":"关键词：牙牌、考试、组合、登科","type":"关键词","value":["牙牌","考试","组合","登科"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]},{"id":"d4_combo_31","level":"L3","name":"乌龙令（十二红）","type":"酒令名称","dimension":"累计组合","difficulty":"高","difficultyScore":3,"play":"通过红点累计组合达成十二红条件。","keywords":["红点累计","十二红","终局","组合"],"diceCount":4,"diceLabel":"四枚及以上骰子","mechanism":"组合对应类","visual":{"nodeColor":"#F8C7D8","nodeSize":22,"ring":"第三圈"},"interaction":{"clickAction":"expandNextLayerAndOpenDetail","targetLevel":"L4","appendMode":true,"detailPanel":true},"children":[{"id":"d4_combo_31_dimension","level":"L4","name":"维度：累计组合","type":"维度","value":"累计组合","visual":{"nodeColor":"#E6F4D7","nodeSize":14},"interaction":{"clickAction":"highlightSameDimension","appendMode":true}},{"id":"d4_combo_31_difficulty","level":"L4","name":"难度：高","type":"难度","value":"高","score":3,"visual":{"nodeColor":"#FDE2C5","nodeSize":14},"interaction":{"clickAction":"highlightSameDifficulty","appendMode":true}},{"id":"d4_combo_31_play","level":"L4","name":"玩法：通过红点累计组合达成十二红条件。","type":"玩法","value":"通过红点累计组合达成十二红条件。","visual":{"nodeColor":"#E7E0FA","nodeSize":14},"interaction":{"clickAction":"openDetailPanel","appendMode":true}},{"id":"d4_combo_31_keywords","level":"L4","name":"关键词：红点累计、十二红、终局、组合","type":"关键词","value":["红点累计","十二红","终局","组合"],"visual":{"nodeColor":"#F7E9A6","nodeSize":14},"interaction":{"clickAction":"applyKeywordFilter","appendMode":true}}]}]}]}]}}</script>
+  <script id="rule-details" type="application/json">[{"name":"福禄寿令","diceCount":1,"diceRequirement":"普通六面骰子，点数1-6，无特殊标记，适合日常酒桌。","tools":"无额外专用用具。","coreRule":"顺时针轮流摇骰。4为福，合席同饮且骰子归公；5为寿，摇骰者自饮一大杯；6为禄，摇骰者自留骰子；1-3点无效并传骰。无骰者需向持禄骰者买骰，累计6枚禄骰后令止。","cultureGroup":"吉祥礼俗"},{"name":"遇缺即升令","diceCount":1,"diceRequirement":"普通六面骰子，无特殊要求。","tools":"6只按1-6编号的空酒盏、1只酒壶。","coreRule":"轮流摇骰，摇出几点就往对应编号酒盏斟满酒。同一人先后摇出3、5点为“越级飞升”，加倍饮酒；摇出6点为“一品当朝”，本轮免摇并传骰；6只酒盏全满令止。","cultureGroup":"功名角色"},{"name":"状元游街令","diceCount":1,"diceRequirement":"普通六面骰子，点数需清晰便于众人查看。","tools":"5只小酒盏、1只大号“状元杯”、1只酒壶。","coreRule":"轮流摇骰，1-5点往对应序号小酒盏斟满且不重复；摇出4点为“状元”，饮尽状元杯后起身与全席猜拳通关。5只小杯酒全饮尽令止。","cultureGroup":"功名角色"},{"name":"一色令","diceCount":1,"diceRequirement":"普通六面骰子，适合多人快速互动。","tools":"无额外专用用具。","coreRule":"点数决定饮酒对象：1点上家饮1杯；2点下家饮1杯；3点与席间第三位客人猜三拳；4点自饮1杯；5点席间第五位饮1杯；6点与席间第六位猜六拳，人数不足时按规则顺延。","cultureGroup":"人情关系"},{"name":"六顺令","diceCount":1,"diceRequirement":"普通六面骰子，无特殊要求。","tools":"无额外专用用具。","coreRule":"每位参与者连摇六次，目标点数依次为1至6。摇中目标点数，自饮对应杯数；未摇中则按规则陪饮或敬饮。完成六次后传骰，宴席主人叫停令止。","cultureGroup":"竞技判定"},{"name":"探花令","diceCount":1,"diceRequirement":"普通六面骰子，点数清晰便于核对。","tools":"无额外专用用具。","coreRule":"先推令官，令官摇骰定“标准点”并公示。令官下家摇骰，点数与标准点相同则令官饮1杯；不同则下家自饮1杯，并成为新令官重新定标准点。","cultureGroup":"竞技判定"},{"name":"三星拱照令","diceCount":1,"diceRequirement":"普通六面骰子，操作简单。","tools":"无额外专用用具。","coreRule":"以3点为核心。摇出3点自饮1杯；4-6点时，上首分别有1、2、3人同饮；1-2点时，下首分别有2、1人同饮，人数不足由摇骰者补足。","cultureGroup":"人情关系"},{"name":"赏月令","diceCount":1,"diceRequirement":"普通六面骰子，适合中秋赏月宴席。","tools":"无额外专用用具。","coreRule":"以1为月。摇出1点，满席同饮“赏月酒”；未摇出1点，摇骰者自饮1杯，然后传骰循环。","cultureGroup":"节令意象"},{"name":"赏雪令","diceCount":1,"diceRequirement":"普通六面骰子，适合冬日赏雪宴席。","tools":"无额外专用用具。","coreRule":"以6为雪。摇出6点，满席同饮“赏雪酒”；未摇出6点，摇骰者自饮1杯，然后传骰循环。","cultureGroup":"节令意象"},{"name":"占风令","diceCount":2,"diceRequirement":"普通六面骰子，可搭配简易方位图。","tools":"无额外专用用具，可备方位图。","coreRule":"约定1为东、2为南、3为西、4为北，5、6重摇。令官摇骰定风向并盖定，客人轮流猜方位；猜中时对应方位者饮，猜错则猜者与令官同饮。","cultureGroup":"竞技判定"},{"name":"三多五福令","diceCount":2,"diceRequirement":"普通六面骰子，同时摇出并计算点数总和。","tools":"无额外专用用具。","coreRule":"3与5组合为8点时合席同饮；2与6、1与1、1与4组合免饮；其余点数和大于8时上首1人饮，小于8时下首1人饮，摇骰者均陪饮1杯。","cultureGroup":"吉祥礼俗"},{"name":"七子八婿令","diceCount":2,"diceRequirement":"普通六面骰子，摇出后计算点数总和。","tools":"无额外专用用具。","coreRule":"点数和为7时，摇骰者与席间多子者同饮；点数和为8时，摇骰者与席间多女者同饮；其余和大于8时上首1人饮，小于7时下首1人饮。","cultureGroup":"人情关系"},{"name":"五日延龄令","diceCount":2,"diceRequirement":"普通六面骰子，摇出后计算点数总和，适合端阳宴席。","tools":"无额外专用用具。","coreRule":"点数和为5时合席同饮；其余和大于5时上首1人饮，小于5时下首1人饮，摇骰者陪饮。","cultureGroup":"节令意象"},{"name":"七夕乞巧令","diceCount":2,"diceRequirement":"普通六面骰子，摇出后计算点数总和，适合七夕宴席。","tools":"无额外专用用具。","coreRule":"点数和为7时，摇骰者自饮；其余和大于7时上首1人饮，小于7时下首1人饮，摇骰者陪饮。","cultureGroup":"节令意象"},{"name":"赏花灯令","diceCount":2,"diceRequirement":"普通六面骰子，查看两个单点，无需计算总和。","tools":"无额外专用用具。","coreRule":"4为灯、5为花，同时出现4和5时合席同饮；1与4、1与5组合免饮；两骰均无4、5时，摇骰者自罚1杯。","cultureGroup":"节令意象"},{"name":"点将令","diceCount":2,"diceRequirement":"普通六面骰子，以单点4为核心。","tools":"无额外专用用具，可备将帅标识。","coreRule":"4为帅。参与者分两队，各队摇出4点者为帅；帅点将与对方猜拳，败者饮酒；所有将领出战后两帅对战，败队全体饮，败帅额外饮。","cultureGroup":"功名角色"},{"name":"猜点令","diceCount":2,"diceRequirement":"普通六面骰子，摇出后计算点数总和。","tools":"1只碗、若干酒盏。","coreRule":"令官摇骰并盖定点数和，客人轮流猜且不得重复。猜中则令官饮1巨杯，猜错则猜者自饮1杯；一轮结束后更换令官。","cultureGroup":"竞技判定"},{"name":"曹酒令","diceCount":2,"diceRequirement":"普通六面骰子，可用1枚或2枚，以单点1为核心。","tools":"1只酒海、若干酒盏。","coreRule":"摇出1点需买酒，每出现1枚一杯；无1点则免饮。全员完成一轮后，令官饮尽酒海中的剩余酒。","cultureGroup":"人情关系"},{"name":"锦团国令","diceCount":3,"diceRequirement":"普通六面骰子，需要查看点数组合与数量。","tools":"无额外专用用具。","coreRule":"对子加单数时重摇；有1点则摇骰者自饮1杯；出现对子则全席同饮；5点最多时右座饮，6点最多时对座饮；摇出4、5、6组合时合席巨饮并令止。","cultureGroup":"竞技判定"},{"name":"赶羊令","diceCount":3,"diceRequirement":"普通六面骰子，摇出后计算点数总和。","tools":"无额外专用用具。","coreRule":"令官先摇骰定“羊数”，客人轮流摇骰比大小。客人比羊数少几点就饮几杯；输家饮酒，赢家接骰继续。","cultureGroup":"竞技判定"},{"name":"三色令","diceCount":3,"diceRequirement":"可使用刻有人物、地点、事件图案或分色的特制骰子。","tools":"无额外专用用具。","coreRule":"按图案或颜色组合定采目：正采、本采免饮；杂采由摇骰者饮1杯；离奇组合由摇骰者饮双杯。","cultureGroup":"人情关系"},{"name":"连中三元令","diceCount":3,"diceRequirement":"普通六面骰子，以1点为核心。","tools":"无额外专用用具。","coreRule":"1为元。三骰均为1点即“连中三元”，席间应试者同饮；出现1至2个1点时摇骰者自饮1杯；没有1点时摇骰者自饮2杯。","cultureGroup":"功名角色"},{"name":"并头运令","diceCount":3,"diceRequirement":"普通六面骰子，以对子为核心。","tools":"无额外专用用具。","coreRule":"摇出对子为“并头”。席间有新婚者时，新婚夫妻同饮；无新婚者时，摇骰者自饮1杯。","cultureGroup":"人情关系"},{"name":"陈氏觞政图令","diceCount":3,"diceRequirement":"普通六面骰子，以4、5、6为核心点数。","tools":"无额外专用用具。","coreRule":"4为德、5为功、6为才，按三种点数出现的数量组合判定官职升降；升时全席贺饮，降时摇骰者罚饮。","cultureGroup":"功名角色"},{"name":"朱窝令（除红谱）","diceCount":4,"diceRequirement":"使用以红点为贵的四枚骰子。","tools":"无额外专用用具。","coreRule":"需恰好出现一枚红点骰；无红或两红及以上均重摇。满足条件后再按点数总和与组合判定饮罚，不同点数组合对应不同杯数。","cultureGroup":"竞技判定"},{"name":"事事如意令","diceCount":4,"diceRequirement":"普通六面骰子，以4点为核心。","tools":"无额外专用用具。","coreRule":"4为如意。累计每凑齐4个4点，摇骰者饮1杯；累计16个4点时饮双杯并令止。四枚骰子点数和为16点时称“四四如意”，全席同饮。","cultureGroup":"吉祥礼俗"},{"name":"公领孙令","diceCount":6,"diceRequirement":"普通六面骰子，以6点和1点为核心。","tools":"无额外专用用具。","coreRule":"6为公、1为孙，需先摇出6点再摇出1点。出现几个1点就有对应人数各饮1杯，孙数不少于3时饮双杯；无6点或有6无1点时，摇骰者罚饮1杯。","cultureGroup":"人情关系"},{"name":"长命富贵令","diceCount":6,"diceRequirement":"普通六面骰子，以4、5、6点为核心。","tools":"无额外专用用具。","coreRule":"4为贵、5为富、6为长命，三种点数全有时全席同饮；缺一种时可用其余点数凑补，重复点数送罚饮给上家；无法凑补则摇骰者自饮1杯。","cultureGroup":"吉祥礼俗"},{"name":"一路功名到白头令","diceCount":6,"diceRequirement":"普通六面骰子，以点数顺序为核心。","tools":"无额外专用用具。","coreRule":"轮流摇骰，累计按顺序摇出1至6即为功成名就；摇不出顺序、多摇无关点数或错摇顺序时，各罚饮1杯；凑齐完整顺序后令止。","cultureGroup":"功名角色"},{"name":"考试令（喜报登科）","diceCount":6,"diceRequirement":"6枚骰子配3枚牙牌，骰子用于拼点，牙牌用于定中式采。","tools":"3枚牙牌、若干酒盏。","coreRule":"令官用牙牌定中式采，参与者用6枚骰子拼21点。拼出的点数与中式采相符即为登科，摇骰者与报喜人对饮1杯。","cultureGroup":"功名角色"},{"name":"乌龙令（十二红）","diceCount":6,"diceRequirement":"使用以红点数量为判定依据的六枚骰子。","tools":"无额外专用用具。","coreRule":"轮流摇骰并计算红点。全黑无红为“乌龙”，不得再摇并需陪饮；猜拳输者与乌龙者同饮；累计集齐十二红后令止。","cultureGroup":"竞技判定"},{"name":"子孝双亲令","diceCount":6,"diceRequirement":"普通六面骰子，以点数总和为核心。","tools":"无额外专用用具。","coreRule":"点数和为26时全席同饮；大于26时上首1人饮，小于26时下首1人饮；小于24时摇骰者另自饮1杯。","cultureGroup":"吉祥礼俗"}]</script>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">✿</span>
+        <div>
+          <h1>骰子令</h1>
+          <div class="subtitle">中国传统骰子酒令</div>
+        </div>
+      </div>
+      <div class="top-stats">
+        <div class="music-control">
+          <button id="musicToggle" type="button" title="播放背景音乐" aria-label="播放背景音乐" aria-pressed="false">♪</button>
+          <label class="visually-hidden" for="musicVolume">背景音乐音量</label>
+          <input id="musicVolume" type="range" min="0" max="100" value="62" aria-label="背景音乐音量" title="背景音乐音量">
+        </div>
+        <div><strong id="totalOrders">42</strong><span>令目总数</span></div>
+        <div><strong id="currentNodeStat">1</strong><span>当前节点</span></div>
+        <div><strong id="expandedLevelStat">L0</strong><span>已展开至</span></div>
+      </div>
+    </header>
+
+    <aside class="left-panel" id="leftPanel">
+      <button class="sidebar-toggle left-toggle" id="leftPanelToggle" type="button" title="收起筛选栏" aria-label="收起筛选栏" aria-expanded="true">‹</button>
+      <div class="left-scroll">
+      <section class="filter-section">
+        <h2 class="section-title">🔍 搜索令目</h2>
+        <div class="search-row">
+          <input id="searchInput" type="search" placeholder="输入令目名称或关键词..." list="searchSuggestions" autocomplete="off">
+          <button id="searchButton" type="button" title="定位第一个匹配节点">定位</button>
+          <datalist id="searchSuggestions"></datalist>
+        </div>
+      </section>
+
+      <section class="filter-section">
+        <h2 class="section-title">🎲 筛选骰子数</h2>
+        <div class="segmented" id="diceFilterButtons"></div>
+      </section>
+
+      <section class="filter-section">
+        <h2 class="section-title">⚙ 筛选规则机制</h2>
+        <div class="segmented" id="mechanismButtons"></div>
+        <select id="mechanismFilter" class="visually-hidden"><option value="">全部</option></select>
+      </section>
+
+      <section class="filter-section">
+        <h2 class="section-title">📊 筛选难度</h2>
+        <div class="segmented" id="difficultyButtons"></div>
+        <select id="difficultyFilter" class="visually-hidden"><option value="">全部</option></select>
+      </section>
+
+      <section class="filter-section grow-section">
+        <h2 class="section-title">🌼 文化主题</h2>
+        <div class="chip-list" id="dimensionButtons"></div>
+        <select id="dimensionFilter" class="visually-hidden"><option value="">全部</option></select>
+      </section>
+
+      <section class="left-actions">
+        <button id="expandButton" class="primary-action" type="button" title="展开全部节点">🌸 全部展开</button>
+        <button id="clearFiltersButton" type="button" title="清除筛选并回到当前视图">↺ 重置筛选</button>
+      </section>
+      </div>
+    </aside>
+
+    <main class="stage">
+      <div class="stage-toolbar">
+        <button id="resetButton" type="button" title="回到中心节点">🌱 收回蒲公英</button>
+        <button id="fitButton" type="button" title="适配画面">⊙ 适合视图</button>
+        <button id="zoomInButton" type="button" title="放大">＋</button>
+        <button id="zoomOutButton" type="button" title="缩小">－</button>
+      </div>
+      <svg id="graph" role="img" aria-label="骰子令蒲公英放射状树图">
+        <defs>
+          <radialGradient id="centerGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#FFF3C7" stop-opacity="0.8"></stop>
+            <stop offset="68%" stop-color="#FFF3C7" stop-opacity="0.12"></stop>
+            <stop offset="100%" stop-color="#FFF3C7" stop-opacity="0"></stop>
+          </radialGradient>
+        </defs>
+        <g id="viewport">
+          <circle cx="0" cy="0" r="150" fill="url(#centerGlow)"></circle>
+          <g id="links"></g>
+          <g id="nodes"></g>
+          <g id="bursts"></g>
+        </g>
+      </svg>
+      <div class="graph-meta">
+        <span class="pill" id="visibleCount">可见 1 / 225</span>
+        <span class="pill" id="zoomLabel">缩放 100%</span>
+        <span class="pill" id="hintLabel">点击中心开始展开</span>
+      </div>
+    </main>
+
+    <aside class="side">
+      <button class="sidebar-toggle right-toggle" id="rightPanelToggle" type="button" title="收起详情栏" aria-label="收起详情栏" aria-expanded="true">›</button>
+      <div class="tabs">
+        <button id="detailTab" class="tab active" type="button">📋 酒令详情</button>
+        <button id="rollTab" class="tab" type="button">🎲 互动投掷</button>
+      </div>
+      <div id="detailPane" class="tab-pane active">
+        <section class="section" id="detailPanel"></section>
+      </div>
+      <div id="rollPane" class="tab-pane">
+        <section class="section">
+          <h2 class="section-title">互动投掷</h2>
+          <div id="gamePanel"></div>
+        </section>
+      </div>
+    </aside>
+  </div>
+  <div class="tooltip" id="tooltip"></div>
+  <div class="round-end-modal" id="roundEndModal" role="dialog" aria-modal="true" aria-labelledby="roundEndTitle" hidden>
+    <div class="round-end-dialog">
+      <div class="round-end-mark" aria-hidden="true">✓</div>
+      <h2 id="roundEndTitle">本轮已结束</h2>
+      <p id="roundEndMessage"></p>
+      <button id="roundEndConfirm" class="primary-action" type="button">知道了</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      "use strict";
+
+      const appData = JSON.parse(document.getElementById("dataset").textContent);
+      const ruleDetails = JSON.parse(document.getElementById("rule-details").textContent);
+      const ruleByName = new Map(ruleDetails.map(function (item) { return [item.name, item]; }));
+      const root = appData.root;
+      const app = document.getElementById("app");
+      const svg = document.getElementById("graph");
+      const viewport = document.getElementById("viewport");
+      const linkLayer = document.getElementById("links");
+      const nodeLayer = document.getElementById("nodes");
+      const burstLayer = document.getElementById("bursts");
+      const tooltip = document.getElementById("tooltip");
+      const detailPanel = document.getElementById("detailPanel");
+      const visibleCount = document.getElementById("visibleCount");
+      const zoomLabel = document.getElementById("zoomLabel");
+      const hintLabel = document.getElementById("hintLabel");
+      const searchInput = document.getElementById("searchInput");
+      const searchButton = document.getElementById("searchButton");
+      const expandButton = document.getElementById("expandButton");
+      const fitButton = document.getElementById("fitButton");
+      const resetButton = document.getElementById("resetButton");
+      const clearFiltersButton = document.getElementById("clearFiltersButton");
+      const zoomInButton = document.getElementById("zoomInButton");
+      const zoomOutButton = document.getElementById("zoomOutButton");
+      const dimensionFilter = document.getElementById("dimensionFilter");
+      const difficultyFilter = document.getElementById("difficultyFilter");
+      const mechanismFilter = document.getElementById("mechanismFilter");
+      const diceFilterButtons = document.getElementById("diceFilterButtons");
+      const mechanismButtons = document.getElementById("mechanismButtons");
+      const difficultyButtons = document.getElementById("difficultyButtons");
+      const dimensionButtons = document.getElementById("dimensionButtons");
+      const gamePanel = document.getElementById("gamePanel");
+      const totalOrders = document.getElementById("totalOrders");
+      const currentNodeStat = document.getElementById("currentNodeStat");
+      const expandedLevelStat = document.getElementById("expandedLevelStat");
+      const detailTab = document.getElementById("detailTab");
+      const rollTab = document.getElementById("rollTab");
+      const detailPane = document.getElementById("detailPane");
+      const rollPane = document.getElementById("rollPane");
+      const leftPanelToggle = document.getElementById("leftPanelToggle");
+      const rightPanelToggle = document.getElementById("rightPanelToggle");
+      const musicToggle = document.getElementById("musicToggle");
+      const musicVolume = document.getElementById("musicVolume");
+      const roundEndModal = document.getElementById("roundEndModal");
+      const roundEndMessage = document.getElementById("roundEndMessage");
+      const roundEndConfirm = document.getElementById("roundEndConfirm");
+
+      const allNodes = [];
+      const byId = new Map();
+      const parentById = new Map();
+      const expanded = new Set();
+      const related = new Set();
+      const highlightedLinks = new Set();
+      let relationLeaf = null;
+      let rollHighlightIds = new Set();
+      let filterHighlightIds = new Set();
+      let activeDetail = null;
+      let selected = root;
+      let visibleNodes = [];
+      let visibleLinks = [];
+      let transform = { x: 0, y: 0, k: 1 };
+      let dragState = null;
+      let filterState = { diceCount: "", dimension: "", difficulty: "", mechanism: "" };
+      let gameRuleName = "";
+      let gameState = {};
+      let resizeTimer = 0;
+      let nodeClickTimer = 0;
+      let pendingNodeId = "";
+      let musicAudioContext = null;
+      let musicMaster = null;
+      let musicDry = null;
+      let musicReverb = null;
+      let musicTimer = 0;
+      let musicPlaying = false;
+      let diceAudioContext = null;
+      let roundEndTimer = 0;
+
+      indexTree(root, null);
+      populateControls();
+      applyTransform();
+      render();
+      requestAnimationFrame(fitToVisible);
+      if (totalOrders) totalOrders.textContent = String(ruleDetails.length);
+
+      searchButton.addEventListener("click", runSearch);
+      searchInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") runSearch();
+      });
+
+      expandButton.addEventListener("click", function () {
+        allNodes.forEach(function (node) {
+          if (node.children && node.children.length) expanded.add(node.id);
+        });
+        selectNode(root, false);
+        render();
+        requestAnimationFrame(fitToVisible);
+      });
+
+      fitButton.addEventListener("click", fitToVisible);
+
+      resetButton.addEventListener("click", function () {
+        closeRoundEndModal();
+        expanded.clear();
+        related.clear();
+        highlightedLinks.clear();
+        relationLeaf = null;
+        rollHighlightIds = new Set();
+        filterHighlightIds = new Set();
+        activeDetail = null;
+        gameRuleName = "";
+        gameState = {};
+        selected = root;
+        filterState = { diceCount: "", dimension: "", difficulty: "", mechanism: "" };
+        dimensionFilter.value = "";
+        difficultyFilter.value = "";
+        mechanismFilter.value = "";
+        updateFilterButtons();
+        render();
+        requestAnimationFrame(fitToVisible);
+      });
+
+      clearFiltersButton.addEventListener("click", clearFilters);
+      zoomInButton.addEventListener("click", function () { zoomFromCenter(1.18); });
+      zoomOutButton.addEventListener("click", function () { zoomFromCenter(0.85); });
+      detailTab.addEventListener("click", function () { setTab("detail"); });
+      rollTab.addEventListener("click", function () { setTab("roll"); });
+      leftPanelToggle.addEventListener("click", function () { toggleSidebar("left"); });
+      rightPanelToggle.addEventListener("click", function () { toggleSidebar("right"); });
+      musicToggle.addEventListener("click", toggleMusic);
+      musicVolume.addEventListener("input", updateMusicVolume);
+      roundEndConfirm.addEventListener("click", closeRoundEndModal);
+      roundEndModal.addEventListener("click", function (event) {
+        if (event.target === roundEndModal) closeRoundEndModal();
+      });
+      document.addEventListener("keydown", function (event) {
+        if (event.key === "Escape" && !roundEndModal.hidden) closeRoundEndModal();
+      });
+
+      svg.addEventListener("pointerdown", function (event) {
+        if (event.target.closest(".node-group")) return;
+        svg.setPointerCapture(event.pointerId);
+        svg.classList.add("dragging");
+        dragState = {
+          id: event.pointerId,
+          sx: event.clientX,
+          sy: event.clientY,
+          x: transform.x,
+          y: transform.y
+        };
+      });
+
+      svg.addEventListener("pointermove", function (event) {
+        if (!dragState || dragState.id !== event.pointerId) return;
+        transform.x = dragState.x + event.clientX - dragState.sx;
+        transform.y = dragState.y + event.clientY - dragState.sy;
+        applyTransform();
+      });
+
+      svg.addEventListener("pointerup", endDrag);
+      svg.addEventListener("pointercancel", endDrag);
+
+      svg.addEventListener("wheel", function (event) {
+        event.preventDefault();
+        const rect = svg.getBoundingClientRect();
+        const mx = event.clientX - rect.left;
+        const my = event.clientY - rect.top;
+        const nextK = clamp(transform.k * Math.exp(-event.deltaY * 0.001), 0.34, 2.8);
+        const wx = (mx - transform.x) / transform.k;
+        const wy = (my - transform.y) / transform.k;
+        transform.x = mx - wx * nextK;
+        transform.y = my - wy * nextK;
+        transform.k = nextK;
+        applyTransform();
+      }, { passive: false });
+
+      window.addEventListener("resize", function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(fitToVisible, 120);
+      });
+
+      function indexTree(node, parent) {
+        if (node.level === "L3") {
+          const details = ruleByName.get(node.name);
+          node.cultureGroup = details ? details.cultureGroup : "竞技判定";
+        }
+        if (node.level === "L4" && node.type === "维度" && parent && parent.level === "L3") {
+          node.originalValue = node.value;
+          node.value = parent.cultureGroup;
+          node.name = "文化：" + parent.cultureGroup;
+        }
+        allNodes.push(node);
+        byId.set(node.id, node);
+        if (parent) parentById.set(node.id, parent);
+        (node.children || []).forEach(function (child) {
+          indexTree(child, node);
+        });
+      }
+
+      function populateControls() {
+        const dimensions = ["吉祥礼俗", "节令意象", "功名角色", "人情关系", "竞技判定"];
+        const difficulties = unique(allNodes.filter(function (n) { return n.level === "L3" && n.difficulty; }).map(function (n) { return n.difficulty; }));
+        const mechanisms = unique(allNodes.filter(function (n) { return n.level === "L3" && n.mechanism; }).map(function (n) { return n.mechanism; }));
+        appendOptions(dimensionFilter, dimensions);
+        appendOptions(difficultyFilter, difficulties);
+        appendOptions(mechanismFilter, mechanisms);
+        createFilterButtons(diceFilterButtons, [
+          { label: "全部", value: "" },
+          { label: "一枚", value: "1" },
+          { label: "两枚", value: "2" },
+          { label: "三枚", value: "3" },
+          { label: "四枚+", value: "4" }
+        ], "diceCount");
+        createFilterButtons(mechanismButtons, [
+          { label: "全部", value: "" },
+          { label: "单点", value: "单点对应类" },
+          { label: "点数和", value: "点数和对应类" },
+          { label: "组合", value: "组合对应类" }
+        ], "mechanism");
+        createFilterButtons(difficultyButtons, [
+          { label: "全部", value: "" },
+          { label: "低难度", value: "低" },
+          { label: "中难度", value: "中" },
+          { label: "高难度", value: "高" }
+        ], "difficulty");
+        createFilterButtons(dimensionButtons, [{ label: "全部", value: "" }].concat(dimensions.map(function (value) {
+          return { label: value, value: value };
+        })), "dimension");
+
+        const suggestions = document.getElementById("searchSuggestions");
+        allNodes.filter(function (node) {
+          return node.level === "L3" || node.level === "L4";
+        }).slice(0, 260).forEach(function (node) {
+          const option = document.createElement("option");
+          option.value = node.name;
+          suggestions.appendChild(option);
+        });
+      }
+
+      function createFilterButtons(container, items, field) {
+        container.replaceChildren();
+        items.forEach(function (item) {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "filter-btn";
+          button.dataset.filterField = field;
+          button.dataset.filterValue = item.value;
+          button.textContent = item.label;
+          button.addEventListener("click", function () {
+            setFilter(field, item.value);
+          });
+          container.appendChild(button);
+        });
+      }
+
+      function appendOptions(select, values) {
+        values.forEach(function (value) {
+          const option = document.createElement("option");
+          option.value = value;
+          option.textContent = value;
+          select.appendChild(option);
+        });
+      }
+
+      function render() {
+        related.clear();
+        highlightedLinks.clear();
+        filterHighlightIds = new Set();
+        if (selected) markPath(selected);
+        if (relationLeaf) markRelatedForLeaf(relationLeaf);
+        rollHighlightIds.forEach(function (id) { related.add(id); });
+        if (filtersActive()) markFilterMatches();
+        if (activeDetail && activeDetail.field === "keyword") markDetailMatches(activeDetail.field, activeDetail.value);
+        visibleNodes = [];
+        visibleLinks = [];
+        collectVisible(root);
+        computeLayout();
+        drawLinks();
+        drawNodes();
+        renderDetail();
+        renderGame();
+        visibleCount.textContent = "可见 " + visibleNodes.length + " / " + allNodes.length;
+        hintLabel.textContent = makeHint();
+        currentNodeStat.textContent = String(visibleNodes.length);
+        expandedLevelStat.textContent = deepestVisibleLevel();
+        updateFilterButtons();
+      }
+
+      function collectVisible(node) {
+        visibleNodes.push(node);
+        if (!expanded.has(node.id)) return;
+        (node.children || []).forEach(function (child) {
+          visibleLinks.push({ source: node, target: child });
+          collectVisible(child);
+        });
+      }
+
+      function computeLayout() {
+        function measure(node) {
+          const kids = expanded.has(node.id) ? (node.children || []) : [];
+          if (!kids.length) {
+            node._span = Math.max(1, node.level === "L4" ? 0.72 : 1);
+            return node._span;
+          }
+          node._span = kids.reduce(function (sum, child) { return sum + measure(child); }, 0);
+          return node._span;
+        }
+
+        function assign(node, start, end, depth) {
+          const angle = (start + end) / 2;
+          node._angle = angle;
+          node._depth = depth;
+          node._radius = radiusFor(node);
+          if (node.id === root.id) {
+            node._x = 0;
+            node._y = 0;
+          } else {
+            node._x = Math.cos(angle) * node._radius;
+            node._y = Math.sin(angle) * node._radius;
+          }
+
+          const kids = expanded.has(node.id) ? (node.children || []) : [];
+          let cursor = start;
+          kids.forEach(function (child) {
+            const width = (end - start) * (child._span / node._span);
+            assign(child, cursor, cursor + width, depth + 1);
+            cursor += width;
+          });
+        }
+
+        const span = measure(root);
+        const margin = visibleNodes.length < 8 ? Math.PI / 3 : Math.PI / 24;
+        root._span = span;
+        assign(root, -Math.PI / 2 + margin, Math.PI * 1.5 - margin, 0);
+      }
+
+      function radiusFor(node) {
+        if (node.level === "L0") return 0;
+        if (node.level === "L1") return 138;
+        if (node.level === "L2") return 270;
+        if (node.level === "L3") return 430;
+        return 575;
+      }
+
+      function drawLinks() {
+        linkLayer.replaceChildren();
+        const fragment = document.createDocumentFragment();
+        visibleLinks.forEach(function (link) {
+          const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          path.setAttribute("class", linkClass(link));
+          path.setAttribute("d", linkPath(link.source, link.target));
+          fragment.appendChild(path);
+        });
+        linkLayer.appendChild(fragment);
+      }
+
+      function linkPath(source, target) {
+        const mid = (source._radius + target._radius) / 2;
+        const c1 = polar(source._angle, mid);
+        const c2 = polar(target._angle, mid);
+        return "M" + source._x.toFixed(2) + "," + source._y.toFixed(2) +
+          " C" + c1.x.toFixed(2) + "," + c1.y.toFixed(2) +
+          " " + c2.x.toFixed(2) + "," + c2.y.toFixed(2) +
+          " " + target._x.toFixed(2) + "," + target._y.toFixed(2);
+      }
+
+      function linkClass(link) {
+        const targetId = link.target.id;
+        const classes = ["link"];
+        if (highlightedLinks.has(targetId)) classes.push("highlighted");
+        if (!nodePassesFilters(link.target) && filtersActive()) classes.push("dimmed");
+        return classes.join(" ");
+      }
+
+      function drawNodes() {
+        nodeLayer.replaceChildren();
+        const fragment = document.createDocumentFragment();
+        visibleNodes.forEach(function (node) {
+          const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          const classes = ["node-group"];
+          if (node.id === selected.id) classes.push("selected");
+          if (related.has(node.id)) classes.push("related");
+          if (filterHighlightIds.has(node.id)) classes.push("filter-match");
+          if (!nodePassesFilters(node) && filtersActive()) classes.push("dimmed");
+          if (node.level === "L4" && visibleNodes.length > 120) classes.push("hidden-label");
+          group.setAttribute("class", classes.join(" "));
+          group.setAttribute("transform", "translate(" + node._x.toFixed(2) + " " + node._y.toFixed(2) + ")");
+          group.setAttribute("data-id", node.id);
+
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          circle.setAttribute("class", "node");
+          circle.setAttribute("r", String(nodeRadius(node)));
+          circle.setAttribute("fill", nodeColor(node));
+          group.appendChild(circle);
+
+          const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+          label.setAttribute("class", "node-label level-" + node.level);
+          label.setAttribute("font-size", String(labelSize(node)));
+          const labelOffset = nodeRadius(node) + (node.level === "L0" ? 0 : 7);
+          if (node.level === "L0") {
+            label.setAttribute("text-anchor", "middle");
+            label.setAttribute("dy", "4");
+          } else {
+            const rightSide = Math.cos(node._angle) >= 0;
+            label.setAttribute("x", String(rightSide ? labelOffset : -labelOffset));
+            label.setAttribute("dy", "4");
+            label.setAttribute("text-anchor", rightSide ? "start" : "end");
+          }
+          label.textContent = displayName(node);
+          group.appendChild(label);
+
+          group.addEventListener("click", function (event) {
+            event.stopPropagation();
+            queueNodeClick(node);
+          });
+          group.addEventListener("dblclick", function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          });
+          group.addEventListener("pointerenter", function (event) {
+            showTooltip(node, event);
+          });
+          group.addEventListener("pointermove", function (event) {
+            moveTooltip(event);
+          });
+          group.addEventListener("pointerleave", hideTooltip);
+          fragment.appendChild(group);
+        });
+        nodeLayer.appendChild(fragment);
+      }
+
+      function handleNodeClick(node) {
+        closeRoundEndModal();
+        selected = node;
+        if (node.children && node.children.length) {
+          relationLeaf = null;
+          rollHighlightIds = new Set();
+          expanded.add(node.id);
+          render();
+          createBurst(node);
+        } else {
+          relationLeaf = node;
+          rollHighlightIds = new Set();
+          render();
+        }
+      }
+
+      function queueNodeClick(node) {
+        if (nodeClickTimer && pendingNodeId === node.id) {
+          clearTimeout(nodeClickTimer);
+          nodeClickTimer = 0;
+          pendingNodeId = "";
+          handleNodeDoubleClick(node);
+          return;
+        }
+        if (nodeClickTimer) clearTimeout(nodeClickTimer);
+        pendingNodeId = node.id;
+        nodeClickTimer = setTimeout(function () {
+          nodeClickTimer = 0;
+          pendingNodeId = "";
+          handleNodeClick(node);
+        }, 220);
+      }
+
+      function handleNodeDoubleClick(node) {
+        if (!node.children || !node.children.length) return;
+        selected = node;
+        relationLeaf = null;
+        rollHighlightIds = new Set();
+        collapseBranch(node);
+        render();
+      }
+
+      function collapseBranch(node) {
+        expanded.delete(node.id);
+        (node.children || []).forEach(collapseBranch);
+      }
+
+      function selectNode(node, reveal) {
+        selected = node;
+        relationLeaf = null;
+        rollHighlightIds = new Set();
+        if (reveal) revealNode(node);
+        render();
+      }
+
+      function revealNode(node) {
+        let current = node;
+        while (parentById.has(current.id)) {
+          const parent = parentById.get(current.id);
+          expanded.add(parent.id);
+          current = parent;
+        }
+      }
+
+      function markPath(node) {
+        let current = node;
+        related.add(current.id);
+        while (parentById.has(current.id)) {
+          const parent = parentById.get(current.id);
+          highlightedLinks.add(current.id);
+          related.add(parent.id);
+          current = parent;
+        }
+      }
+
+      function markRelatedForLeaf(node) {
+        markPath(node);
+        const parent = parentById.get(node.id);
+        const nodeType = node.type || "";
+        const nodeValue = normalValue(node.value || node.name);
+        allNodes.forEach(function (candidate) {
+          const parentCandidate = parentById.get(candidate.id);
+          if (candidate.level === "L4" && candidate.type === nodeType && valuesOverlap(candidate.value || candidate.name, node.value || node.name)) {
+            related.add(candidate.id);
+            if (parentCandidate) related.add(parentCandidate.id);
+          }
+          if (candidate.level === "L3" && parent && parent.level === "L3") {
+            if (nodeType === "维度" && candidate.dimension === parent.dimension) related.add(candidate.id);
+            if (nodeType === "难度" && candidate.difficulty === parent.difficulty) related.add(candidate.id);
+            if (nodeType === "关键词" && valuesOverlap(candidate.keywords || [], nodeValue)) related.add(candidate.id);
+          }
+        });
+      }
+
+      function setFilter(field, value) {
+        const nextValue = filterState[field] === value ? "" : value;
+        filterState[field] = nextValue;
+        activeDetail = nextValue ? { field: field, value: nextValue } : null;
+        syncFilterSelects();
+        relationLeaf = null;
+        rollHighlightIds = new Set();
+        revealFilterMatches();
+        render();
+        requestAnimationFrame(fitToFilterMatches);
+      }
+
+      function clearFilters() {
+        filterState = { diceCount: "", dimension: "", difficulty: "", mechanism: "" };
+        activeDetail = null;
+        relationLeaf = null;
+        rollHighlightIds = new Set();
+        syncFilterSelects();
+        render();
+        requestAnimationFrame(fitToVisible);
+      }
+
+      function syncFilterSelects() {
+        dimensionFilter.value = filterState.dimension || "";
+        difficultyFilter.value = filterState.difficulty || "";
+        mechanismFilter.value = filterState.mechanism || "";
+      }
+
+      function bindFilterElement(el) {
+        el.addEventListener("click", function (event) {
+          event.stopPropagation();
+          setFilter(el.dataset.filterField, el.dataset.filterValue);
+        });
+      }
+
+      function handleDetailClick(field, value) {
+        if (!field || !value) return;
+        if (field === "keyword") {
+          activeDetail = activeDetail && activeDetail.field === field && activeDetail.value === value ? null : { field: field, value: value };
+          relationLeaf = null;
+          rollHighlightIds = new Set();
+          revealDetailMatches(field, value);
+          render();
+          requestAnimationFrame(fitToFilterMatches);
+          return;
+        }
+        setFilter(field, value);
+      }
+
+      function revealFilterMatches() {
+        getFilterMatches().forEach(revealNode);
+      }
+
+      function revealDetailMatches(field, value) {
+        getDetailMatches(field, value).forEach(revealNode);
+      }
+
+      function getFilterMatches() {
+        if (!filtersActive()) return [];
+        return allNodes.filter(function (node) {
+          return node.level === "L3" && directFilterMatch(node);
+        });
+      }
+
+      function getDetailMatches(field, value) {
+        return allNodes.filter(function (node) {
+          if (node.level === "L3") {
+            if (field === "keyword") return (node.keywords || []).some(function (keyword) { return keyword === value; });
+            if (field === "diceCount") return String(node.diceCount || "") === String(value);
+            return node[field] === value;
+          }
+          if (node.level === "L4" && field === "keyword" && node.type === "关键词") {
+            return valuesOverlap(node.value || [], value);
+          }
+          return false;
+        });
+      }
+
+      function markFilterMatches() {
+        getFilterMatches().forEach(function (node) {
+          filterHighlightIds.add(node.id);
+          markPath(node);
+          (node.children || []).forEach(function (child) {
+            if (nodePassesFilterDetail(child)) filterHighlightIds.add(child.id);
+          });
+        });
+      }
+
+      function markDetailMatches(field, value) {
+        getDetailMatches(field, value).forEach(function (node) {
+          filterHighlightIds.add(node.id);
+          markPath(node);
+        });
+      }
+
+      function nodePassesFilterDetail(node) {
+        if (!activeDetail) return false;
+        if (activeDetail.field === "dimension" && node.type === "维度") return node.value === activeDetail.value;
+        if (activeDetail.field === "difficulty" && node.type === "难度") return node.value === activeDetail.value;
+        if (activeDetail.field === "keyword" && node.type === "关键词") return valuesOverlap(node.value || [], activeDetail.value);
+        if (activeDetail.field === "mechanism") return false;
+        if (activeDetail.field === "diceCount") return false;
+        return false;
+      }
+
+      function updateFilterButtons() {
+        document.querySelectorAll("[data-filter-field]").forEach(function (el) {
+          const field = el.dataset.filterField;
+          const value = el.dataset.filterValue || "";
+          const isActive = filterState[field] === value || (!value && !filterState[field] && el.classList.contains("filter-btn"));
+          el.classList.toggle("active", Boolean(isActive));
+        });
+      }
+
+      function deepestVisibleLevel() {
+        const order = ["L0", "L1", "L2", "L3", "L4"];
+        const max = visibleNodes.reduce(function (result, node) {
+          return Math.max(result, order.indexOf(node.level));
+        }, 0);
+        return order[Math.max(0, max)] || "L0";
+      }
+
+      function fieldFromL4(node) {
+        if (node.type === "维度") return "dimension";
+        if (node.type === "难度") return "difficulty";
+        if (node.type === "关键词") return "keyword";
+        return "";
+      }
+
+      function valueFromL4(node) {
+        if (node.type === "关键词" && Array.isArray(node.value)) return node.value[0] || "";
+        return valueText(node.value);
+      }
+
+      function renderDetail() {
+        const node = selected && selected.level === "L3" ? selected : nearestLevel(selected, "L3");
+        const details = node ? ruleByName.get(node.name) : null;
+        if (!node || !details) {
+          detailPanel.innerHTML = "<div class=\"detail-placeholder\"><div>点击图中的酒令名称<br>这里会显示它的用骰、用具与完整规则</div></div>";
+          return;
+        }
+        detailPanel.innerHTML =
+          "<div class=\"detail-sheet\">" +
+            "<div class=\"detail-heading\">" +
+              "<h2 class=\"detail-title\">" + esc(details.name) + "</h2>" +
+              "<div class=\"detail-kicker\">用骰 " + details.diceCount + " 枚</div>" +
+            "</div>" +
+            detailBlock("用骰要求", details.diceRequirement) +
+            detailBlock("必备用具", details.tools) +
+            detailBlock("核心规则", details.coreRule) +
+          "</div>";
+      }
+
+      function detailBlock(label, text) {
+        return "<div class=\"detail-block\"><h3>" + esc(label) + "</h3><p>" + esc(text) + "</p></div>";
+      }
+
+      function runSearch() {
+        const query = searchInput.value.trim().toLowerCase();
+        if (!query) return;
+        const target = allNodes.find(function (node) {
+          return searchableText(node).toLowerCase().includes(query);
+        });
+        if (!target) {
+          hintLabel.textContent = "没有找到匹配节点";
+          return;
+        }
+        selected = target;
+        relationLeaf = null;
+        rollHighlightIds = new Set();
+        revealNode(target);
+        render();
+        requestAnimationFrame(function () {
+          centerOnNode(target);
+          const group = nodeLayer.querySelector("[data-id=\"" + cssEscape(target.id) + "\"]");
+          if (group) {
+            group.animate([
+              { opacity: 0.38 },
+              { opacity: 1 }
+            ], { duration: 420, easing: "cubic-bezier(.2,.8,.2,1)" });
+          }
+        });
+      }
+
+      function renderGame() {
+        const node = selected && selected.level === "L3" ? selected : nearestLevel(selected, "L3");
+        const details = node ? ruleByName.get(node.name) : null;
+        if (!node || !details) {
+          gamePanel.innerHTML = "<div class=\"detail-placeholder\"><div>先在图中选择一个酒令<br>这里会出现对应的互动玩法</div></div>";
+          return;
+        }
+        if (gameRuleName !== details.name) {
+          gameRuleName = details.name;
+          gameState = createGameState(details.name);
+        }
+
+        const diceHtml = gameState.lastRoll.length
+          ? gameState.lastRoll.map(function (value) {
+              return "<span class=\"game-die\" aria-label=\"" + value + "点\">" + diceGlyph(value) + "</span>";
+            }).join("")
+          : "<span class=\"empty\">等待投掷</span>";
+        const resultClass = gameState.tone ? " " + gameState.tone : "";
+        gamePanel.innerHTML =
+          "<div class=\"game-shell\">" +
+            "<div class=\"game-head\"><strong>" + esc(details.name) + "</strong><span>本局使用 " + details.diceCount + " 枚骰子，结果按本令规则即时判定。</span></div>" +
+            gameSetupHtml(details.name) +
+            "<div class=\"game-actions\">" +
+              "<button class=\"primary-action\" id=\"gameRollButton\" type=\"button\">🎲 投掷 " + details.diceCount + " 枚骰子</button>" +
+              "<button id=\"gameResetButton\" type=\"button\" title=\"重新开局\" aria-label=\"重新开局\">↺</button>" +
+            "</div>" +
+            "<div class=\"game-dice\">" + diceHtml + "</div>" +
+            "<div class=\"game-result" + resultClass + "\">" + esc(gameState.message) + "</div>" +
+            "<div class=\"game-progress\">" + gameProgressHtml(details.name) + "</div>" +
+            "<div class=\"game-note\">" + esc(gameNote(details.name)) + "</div>" +
+          "</div>";
+
+        document.getElementById("gameRollButton").addEventListener("click", rollCurrentGame);
+        document.getElementById("gameResetButton").addEventListener("click", function () {
+          closeRoundEndModal();
+          gameState = createGameState(details.name);
+          rollHighlightIds = new Set();
+          render();
+        });
+        const guessInput = document.getElementById("gameGuess");
+        if (guessInput) {
+          guessInput.addEventListener("input", function () {
+            gameState.guess = clamp(Number(guessInput.value) || 2, 2, 12);
+          });
+        }
+        const directionSelect = document.getElementById("gameDirection");
+        if (directionSelect) {
+          directionSelect.addEventListener("change", function () {
+            gameState.direction = directionSelect.value;
+          });
+        }
+      }
+
+      function createGameState(name) {
+        return {
+          name: name,
+          round: 0,
+          lastRoll: [],
+          message: "点击投掷，开始本局。",
+          tone: "",
+          filled: [],
+          target: null,
+          standard: null,
+          next: 1,
+          luCount: 0,
+          fourCount: 0,
+          redTotal: 0,
+          hasGrand: false,
+          guess: 7,
+          direction: "东",
+          lastPoint: null
+        };
+      }
+
+      function gameSetupHtml(name) {
+        if (name === "猜点令") {
+          return "<div class=\"game-setup\"><label for=\"gameGuess\">先猜两枚骰子的总点数</label><input id=\"gameGuess\" type=\"number\" min=\"2\" max=\"12\" value=\"" + gameState.guess + "\"></div>";
+        }
+        if (name === "占风令") {
+          return "<div class=\"game-setup\"><label for=\"gameDirection\">先猜风向</label><select id=\"gameDirection\">" +
+            ["东", "南", "西", "北"].map(function (value) {
+              return "<option value=\"" + value + "\"" + (gameState.direction === value ? " selected" : "") + ">" + value + "</option>";
+            }).join("") +
+          "</select></div>";
+        }
+        return "";
+      }
+
+      function gameProgressHtml(name) {
+        if (name === "福禄寿令") return progressChip("禄骰 " + gameState.luCount + " / 6", gameState.luCount >= 6);
+        if (name === "遇缺即升令" || name === "状元游街令") {
+          const limit = name === "遇缺即升令" ? 6 : 5;
+          return Array.from({ length: limit }, function (_, index) {
+            const value = index + 1;
+            return progressChip(value + "号", gameState.filled.includes(value));
+          }).join("");
+        }
+        if (name === "六顺令") {
+          return Array.from({ length: 6 }, function (_, index) {
+            const value = index + 1;
+            return progressChip(String(value), value < gameState.next);
+          }).join("");
+        }
+        if (name === "探花令") return progressChip(gameState.standard ? "标准点 " + gameState.standard : "等待令官定点", Boolean(gameState.standard));
+        if (name === "赶羊令") return progressChip(gameState.target ? "羊数 " + gameState.target : "等待令官定羊数", Boolean(gameState.target));
+        if (name === "事事如意令") return progressChip("累计四点 " + gameState.fourCount + " / 16", gameState.fourCount >= 16);
+        if (name === "公领孙令") return progressChip(gameState.hasGrand ? "已见公点 6" : "先寻公点 6", gameState.hasGrand);
+        if (name === "一路功名到白头令") {
+          return Array.from({ length: 6 }, function (_, index) {
+            const value = index + 1;
+            return progressChip(String(value), value < gameState.next);
+          }).join("");
+        }
+        if (name === "乌龙令（十二红）") return progressChip("累计红点 " + gameState.redTotal + " / 12", gameState.redTotal >= 12);
+        return progressChip("第 " + gameState.round + " 轮", gameState.round > 0);
+      }
+
+      function progressChip(text, done) {
+        return "<span class=\"progress-chip" + (done ? " done" : "") + "\">" + esc(text) + "</span>";
+      }
+
+      function gameNote(name) {
+        if (name === "三色令") return "特制色骰以数字分组模拟：1-2为红，3-4为青，5-6为白。";
+        if (name === "朱窝令（除红谱）" || name === "乌龙令（十二红）") return "数字版按传统骰面模拟红点：1点与4点计作红色骰面。";
+        if (name === "考试令（喜报登科）") return "本版先模拟“六骰拼21点”，牙牌中式采仍按原令现场约定。";
+        return "互动结果用于体验传统规则；实际行令时可按席间人数与约定调整。";
+      }
+
+      function rollCurrentGame() {
+        const details = ruleByName.get(gameRuleName);
+        if (!details) return;
+        playDiceRollSound();
+        const rolls = Array.from({ length: details.diceCount }, function () {
+          return 1 + Math.floor(Math.random() * 6);
+        });
+        gameState.round += 1;
+        gameState.lastRoll = rolls;
+        const outcome = evaluateRule(details.name, rolls);
+        gameState.message = outcome.message;
+        gameState.tone = outcome.tone || "";
+        if (isRoundEnding(outcome.message)) {
+          queueRoundEndModal(details.name);
+        } else {
+          playGameOutcomeSound(outcome);
+        }
+        relationLeaf = null;
+        activeDetail = null;
+        highlightRuleName(details.name);
+        render();
+      }
+
+      function highlightRuleName(name) {
+        rollHighlightIds = new Set();
+        allNodes.filter(function (node) {
+          return node.level === "L3" && node.name === name;
+        }).forEach(function (node) {
+          revealNode(node);
+          let current = node;
+          rollHighlightIds.add(current.id);
+          while (parentById.has(current.id)) {
+            current = parentById.get(current.id);
+            rollHighlightIds.add(current.id);
+          }
+        });
+      }
+
+      function evaluateRule(name, rolls) {
+        const total = rolls.reduce(function (value, item) { return value + item; }, 0);
+        const sorted = rolls.slice().sort(function (a, b) { return a - b; });
+        const countOf = function (value) {
+          return rolls.filter(function (item) { return item === value; }).length;
+        };
+        const uniqueCount = new Set(rolls).size;
+        const first = rolls[0];
+
+        switch (name) {
+          case "福禄寿令":
+            if (first === 4) return gameOutcome("福到：合席同饮，骰子归公。", "win", "fulu-fu");
+            if (first === 5) return gameOutcome("寿到：摇骰者自饮一大杯。", "penalty", "fulu-shou");
+            if (first === 6) {
+              gameState.luCount += 1;
+              return gameOutcome(gameState.luCount >= 6 ? "六枚禄骰已齐，本令结束。" : "禄到：自留骰子，当前共 " + gameState.luCount + " 枚。", "win", "fulu-lu");
+            }
+            return gameOutcome(first + "点无采，传骰给下一位。", "", "fulu-pass");
+
+          case "遇缺即升令": {
+            const wasFilled = gameState.filled.includes(first);
+            if (!wasFilled) gameState.filled.push(first);
+            let message = wasFilled ? first + "号酒盏已经斟满，本次不重复斟酒。" : "斟满 " + first + " 号酒盏。";
+            if (gameState.lastPoint === 3 && first === 5) message += " 先3后5，越级飞升，加倍饮酒。";
+            if (first === 6) message += " 一品当朝，本轮免摇并传骰。";
+            gameState.lastPoint = first;
+            if (gameState.filled.length >= 6) message += " 六盏皆满，本令结束。";
+            return gameOutcome(message, gameState.filled.length >= 6 ? "win" : "");
+          }
+
+          case "状元游街令": {
+            if (first <= 5 && !gameState.filled.includes(first)) gameState.filled.push(first);
+            let message = first <= 5 ? "斟满 " + first + " 号小酒盏。" : "6点不入五盏，本轮传骰。";
+            if (first === 4) message += " 状元出街：饮状元杯并与全席猜拳通关。";
+            if (gameState.filled.length >= 5) message += " 五只小杯已齐，本令结束。";
+            return gameOutcome(message, first === 4 || gameState.filled.length >= 5 ? "win" : "");
+          }
+
+          case "一色令": {
+            const actions = {
+              1: "上家饮1杯。",
+              2: "下家饮1杯。",
+              3: "与席间第三位客人猜三拳，输一拳饮一杯。",
+              4: "摇骰者自饮1杯。",
+              5: "席间第五位饮1杯，人数不足则传骰。",
+              6: "与席间第六位猜六拳，人数不足则与末位猜。"
+            };
+            return gameOutcome(actions[first], first === 4 ? "penalty" : "");
+          }
+
+          case "六顺令":
+            if (first === gameState.next) {
+              const hit = gameState.next;
+              gameState.next += 1;
+              return gameOutcome(gameState.next > 6 ? "命中6点并完成六顺，本轮功成。" : "命中目标 " + hit + " 点，自饮 " + hit + " 杯；下一目标是 " + gameState.next + " 点。", "win");
+            }
+            return gameOutcome("本轮目标为 " + gameState.next + " 点，掷出 " + first + " 点，按席间约定陪饮或敬饮。", "penalty");
+
+          case "探花令":
+            if (!gameState.standard) {
+              gameState.standard = first;
+              return gameOutcome("令官定下标准点 " + first + "，请下一位继续投掷。", "win");
+            }
+            if (first === gameState.standard) return gameOutcome("命中标准点 " + first + "，令官饮1杯。", "win");
+            gameState.standard = first;
+            return gameOutcome("未命中，摇骰者饮1杯并成为新令官；新标准点为 " + first + "。", "penalty");
+
+          case "三星拱照令":
+            if (first === 3) return gameOutcome("三星当中，摇骰者自饮1杯。", "penalty");
+            if (first > 3) return gameOutcome(first + "点：上首 " + (first - 3) + " 人同饮。", "");
+            return gameOutcome(first + "点：下首 " + (3 - first) + " 人同饮，人数不足由摇骰者补足。", "");
+
+          case "赏月令":
+            return first === 1 ? gameOutcome("月出：满席同饮赏月酒。", "win") : gameOutcome("未见月，摇骰者自饮1杯。", "penalty");
+
+          case "赏雪令":
+            return first === 6 ? gameOutcome("雪落：满席同饮赏雪酒。", "win") : gameOutcome("未见雪，摇骰者自饮1杯。", "penalty");
+
+          case "占风令": {
+            const wind = { 1: "东", 2: "南", 3: "西", 4: "北" }[first];
+            if (!wind) return gameOutcome(first + "点不定方位，请重摇。", "");
+            return wind === gameState.direction
+              ? gameOutcome("风从" + wind + "来，猜中方位；对应方位者饮。", "win")
+              : gameOutcome("风从" + wind + "来，未猜中；猜者与令官同饮。", "penalty");
+          }
+
+          case "三多五福令": {
+            const key = sorted.join("-");
+            if (key === "3-5") return gameOutcome("三多五福，合席同饮。", "win");
+            if (["2-6", "1-1", "1-4"].includes(key)) return gameOutcome("吉祥免饮组合，本轮免饮。", "win");
+            if (total > 8) return gameOutcome("合计 " + total + "，上首1人饮，摇骰者陪饮1杯。", "penalty");
+            if (total < 8) return gameOutcome("合计 " + total + "，下首1人饮，摇骰者陪饮1杯。", "penalty");
+            return gameOutcome("合计8点但不是3与5组合，本轮无特别采目。", "");
+          }
+
+          case "七子八婿令":
+            if (total === 7) return gameOutcome("七子：摇骰者与席间多子者同饮。", "win");
+            if (total === 8) return gameOutcome("八婿：摇骰者与席间多女者同饮。", "win");
+            return total > 8 ? gameOutcome("合计 " + total + "，上首1人饮。", "") : gameOutcome("合计 " + total + "，下首1人饮。", "");
+
+          case "五日延龄令":
+            if (total === 5) return gameOutcome("五日延龄，合席同饮。", "win");
+            return total > 5 ? gameOutcome("合计 " + total + "，上首1人饮，摇骰者陪饮。", "penalty") : gameOutcome("合计 " + total + "，下首1人饮，摇骰者陪饮。", "penalty");
+
+          case "七夕乞巧令":
+            if (total === 7) return gameOutcome("七夕得巧，摇骰者自饮。", "win");
+            return total > 7 ? gameOutcome("合计 " + total + "，上首1人饮，摇骰者陪饮。", "penalty") : gameOutcome("合计 " + total + "，下首1人饮，摇骰者陪饮。", "penalty");
+
+          case "赏花灯令":
+            if (rolls.includes(4) && rolls.includes(5)) return gameOutcome("花灯同现，合席同饮。", "win");
+            if (rolls.includes(1) && (rolls.includes(4) || rolls.includes(5))) return gameOutcome("一与花灯相合，本轮免饮。", "win");
+            if (!rolls.includes(4) && !rolls.includes(5)) return gameOutcome("无花无灯，摇骰者自罚1杯。", "penalty");
+            return gameOutcome("只见花或灯，按席间约定传骰。", "");
+
+          case "点将令": {
+            const commanders = countOf(4);
+            return commanders ? gameOutcome("出现 " + commanders + " 个4点，选出对应数量的“帅”进入点将与猜拳。", "win") : gameOutcome("本轮未见4点，尚未点出主帅。", "");
+          }
+
+          case "猜点令":
+            return total === gameState.guess
+              ? gameOutcome("合计 " + total + "，猜中！令官饮1巨杯。", "win")
+              : gameOutcome("合计 " + total + "，与所猜 " + gameState.guess + " 点不同，猜者自饮1杯。", "penalty");
+
+          case "曹酒令": {
+            const ones = countOf(1);
+            return ones ? gameOutcome("出现 " + ones + " 枚1点，需要买酒 " + ones + " 杯。", "penalty") : gameOutcome("没有1点，本轮免饮。", "win");
+          }
+
+          case "锦团国令": {
+            if (sorted.join("-") === "4-5-6") return gameOutcome("四五六齐聚，合席巨饮，本令结束。", "win");
+            if (uniqueCount === 2) return gameOutcome("出现对子加单数，按令重摇；若按对子采，也可合席同饮。", "");
+            if (rolls.includes(1)) return gameOutcome("出现1点，摇骰者自饮1杯。", "penalty");
+            if (countOf(5) > countOf(6) && countOf(5) > 0) return gameOutcome("5点最多，右座饮。", "");
+            if (countOf(6) > countOf(5) && countOf(6) > 0) return gameOutcome("6点最多，对座饮。", "");
+            return gameOutcome("本轮没有特殊采目，传骰继续。", "");
+          }
+
+          case "赶羊令":
+            if (gameState.target === null) {
+              gameState.target = total;
+              return gameOutcome("令官定下羊数 " + total + "，下一位开始比大小。", "win");
+            }
+            if (total < gameState.target) return gameOutcome("合计 " + total + "，比羊数少 " + (gameState.target - total) + " 点，饮 " + (gameState.target - total) + " 杯。", "penalty");
+            if (total > gameState.target) {
+              const oldTarget = gameState.target;
+              gameState.target = total;
+              return gameOutcome("合计 " + total + "，胜过羊数 " + oldTarget + "，成为新的领骰者。", "win");
+            }
+            return gameOutcome("合计正好 " + total + "，与羊数相同，本轮和局。", "");
+
+          case "三色令": {
+            const colors = rolls.map(function (value) { return value <= 2 ? "红" : value <= 4 ? "青" : "白"; });
+            const colorCount = new Set(colors).size;
+            if (colorCount === 1) return gameOutcome(colors.join("、") + "，同色正采，本轮免饮。", "win");
+            if (colorCount === 2) return gameOutcome(colors.join("、") + "，两色本采，本轮免饮。", "win");
+            return gameOutcome(colors.join("、") + "，三色杂采，摇骰者饮1杯。", "penalty");
+          }
+
+          case "连中三元令": {
+            const ones = countOf(1);
+            if (ones === 3) return gameOutcome("三个1点，连中三元；席间应试者同饮。", "win");
+            if (ones > 0) return gameOutcome("出现 " + ones + " 个“元”，摇骰者自饮1杯。", "penalty");
+            return gameOutcome("没有1点，摇骰者自饮2杯。", "penalty");
+          }
+
+          case "并头运令":
+            return uniqueCount < rolls.length ? gameOutcome("出现相同点数，“并头”成采；新婚夫妻同饮，无新婚者则摇骰者自饮。", "win") : gameOutcome("三点各异，未成并头，传骰继续。", "");
+
+          case "陈氏觞政图令": {
+            const virtue = countOf(4);
+            const merit = countOf(5);
+            const talent = countOf(6);
+            const rank = virtue + merit + talent;
+            if (rank >= 2) return gameOutcome("德 " + virtue + "、功 " + merit + "、才 " + talent + "，采目丰厚，判作升官，全席贺饮。", "win");
+            if (rank === 1) return gameOutcome("德功才仅得一项，官阶平移，按席间谱面判定。", "");
+            return gameOutcome("德、功、才皆未出现，判作降等，摇骰者罚饮。", "penalty");
+          }
+
+          case "朱窝令（除红谱）": {
+            const redDice = rolls.filter(function (value) { return value === 1 || value === 4; }).length;
+            if (redDice !== 1) return gameOutcome("红色骰面共 " + redDice + " 枚，不合“恰好一红”，请重摇。", "penalty");
+            return gameOutcome("恰好一红，合计 " + total + " 点，进入除红谱的组合判罚。", "win");
+          }
+
+          case "事事如意令": {
+            const fours = countOf(4);
+            const before = Math.floor(gameState.fourCount / 4);
+            gameState.fourCount += fours;
+            const after = Math.floor(gameState.fourCount / 4);
+            let message = "本轮出现 " + fours + " 个4点，累计 " + gameState.fourCount + " 个如意点。";
+            if (total === 16) message += " 四骰合计16点，四四如意，全席同饮。";
+            if (after > before) message += " 新凑齐一组四点，摇骰者饮 " + (after - before) + " 杯。";
+            if (gameState.fourCount >= 16) message += " 已满16个四点，饮双杯并令止。";
+            return gameOutcome(message, total === 16 || gameState.fourCount >= 16 ? "win" : fours ? "" : "penalty");
+          }
+
+          case "公领孙令": {
+            if (rolls.includes(6)) gameState.hasGrand = true;
+            const sons = countOf(1);
+            if (!gameState.hasGrand) return gameOutcome("未见6点“公”，摇骰者罚饮1杯。", "penalty");
+            if (!sons) return gameOutcome("已见“公”但没有1点“孙”，摇骰者罚饮1杯。", "penalty");
+            return gameOutcome("公领 " + sons + " 孙，对应 " + sons + " 人饮1杯" + (sons >= 3 ? "，孙数不少于3，改饮双杯。" : "。"), "win");
+          }
+
+          case "长命富贵令": {
+            const present = [4, 5, 6].filter(function (value) { return rolls.includes(value); });
+            if (present.length === 3) return gameOutcome("贵、富、长命三采俱全，合席同饮。", "win");
+            if (present.length === 2) return gameOutcome("已得 " + present.join("、") + "，尚缺一采，可按重复点数凑补并送罚饮给上家。", "");
+            return gameOutcome("关键采目不足，无法凑补时由摇骰者自饮1杯。", "penalty");
+          }
+
+          case "一路功名到白头令": {
+            let advanced = 0;
+            let mistakes = 0;
+            rolls.forEach(function (value) {
+              if (value === gameState.next) {
+                gameState.next += 1;
+                advanced += 1;
+              } else {
+                mistakes += 1;
+              }
+            });
+            if (gameState.next > 6) return gameOutcome("已按顺序凑齐1至6，功成名就，本令结束。", "win");
+            return gameOutcome("本轮顺进 " + advanced + " 步，误点 " + mistakes + " 次；下一目标为 " + gameState.next + " 点。", mistakes ? "penalty" : "");
+          }
+
+          case "考试令（喜报登科）":
+            if (total === 21) return gameOutcome("六骰合计21点，拼点成功，可对照牙牌中式采报喜登科。", "win");
+            return gameOutcome("六骰合计 " + total + " 点，距离21点相差 " + Math.abs(21 - total) + " 点。", total < 21 ? "" : "penalty");
+
+          case "乌龙令（十二红）": {
+            const red = rolls.reduce(function (value, item) {
+              return value + (item === 1 ? 1 : item === 4 ? 4 : 0);
+            }, 0);
+            if (red === 0) return gameOutcome("本轮全黑无红，为“乌龙”；不得再摇并需陪饮。", "penalty");
+            gameState.redTotal += red;
+            return gameOutcome(gameState.redTotal >= 12 ? "累计红点达到 " + gameState.redTotal + "，十二红已成，本令结束。" : "本轮得到 " + red + " 个红点，累计 " + gameState.redTotal + " / 12。", gameState.redTotal >= 12 ? "win" : "");
+          }
+
+          case "子孝双亲令":
+            if (total === 26) return gameOutcome("合计26点，子孝双亲，合席同饮。", "win");
+            if (total > 26) return gameOutcome("合计 " + total + " 点，上首1人饮。", "");
+            return gameOutcome("合计 " + total + " 点，下首1人饮" + (total < 24 ? "；因低于24点，摇骰者另自饮1杯。" : "。"), total < 24 ? "penalty" : "");
+
+          default:
+            return gameOutcome("本轮合计 " + total + " 点，请按右侧核心规则行令。", "");
+        }
+      }
+
+      function gameOutcome(message, tone, soundKey) {
+        return {
+          message: message,
+          tone: tone || "",
+          soundKey: soundKey || makeOutcomeSoundKey(gameRuleName, message, tone)
+        };
+      }
+
+      function makeOutcomeSoundKey(ruleName, message, tone) {
+        const normalized = String(message || "").replace(/\d+/g, "#");
+        return [ruleName || "酒令", tone || "neutral", normalized].join("|");
+      }
+
+      function diceGlyph(value) {
+        return ["", "⚀", "⚁", "⚂", "⚃", "⚄", "⚅"][value] || String(value);
+      }
+
+      function nodePassesFilters(node) {
+        if (!filtersActive()) return true;
+        const carrier = node.level === "L3" ? node : nearestLevel(node, "L3");
+        if (carrier) return directFilterMatch(carrier);
+        return hasMatchingDescendant(node);
+      }
+
+      function directFilterMatch(node) {
+        if (filterState.diceCount) {
+          const count = Number(node.diceCount || 0);
+          if (filterState.diceCount === "4" ? count < 4 : count !== Number(filterState.diceCount)) return false;
+        }
+        if (filterState.dimension && node.cultureGroup !== filterState.dimension) return false;
+        if (filterState.difficulty && node.difficulty !== filterState.difficulty) return false;
+        if (filterState.mechanism && node.mechanism !== filterState.mechanism) return false;
+        return true;
+      }
+
+      function hasMatchingDescendant(node) {
+        if (node.level === "L3" && directFilterMatch(node)) return true;
+        return (node.children || []).some(hasMatchingDescendant);
+      }
+
+      function filtersActive() {
+        return Boolean(filterState.diceCount || filterState.dimension || filterState.difficulty || filterState.mechanism);
+      }
+
+      function nearestLevel(node, level) {
+        let current = node;
+        while (current) {
+          if (current.level === level) return current;
+          current = parentById.get(current.id);
+        }
+        return null;
+      }
+
+      function makeHint() {
+        if (selected.children && selected.children.length) {
+          return expanded.has(selected.id) ? "继续单击外圈，双击当前节点收回" : "单击展开，双击收回";
+        }
+        if (selected.level === "L4") return "同类节点已高亮";
+        return "滚轮缩放，拖动画布";
+      }
+
+      function fitToVisible() {
+        fitToNodes(visibleNodes);
+      }
+
+      function fitToFilterMatches() {
+        const matches = filtersActive()
+          ? visibleNodes.filter(function (node) { return nodePassesFilters(node); })
+          : visibleNodes;
+        fitToNodes(matches.length ? matches : visibleNodes);
+      }
+
+      function fitToNodes(nodes) {
+        const rect = svg.getBoundingClientRect();
+        if (!rect.width || !rect.height || !nodes.length) return;
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        nodes.forEach(function (node) {
+          const r = nodeRadius(node) + 120;
+          minX = Math.min(minX, node._x - r);
+          minY = Math.min(minY, node._y - r);
+          maxX = Math.max(maxX, node._x + r);
+          maxY = Math.max(maxY, node._y + r);
+        });
+        const width = Math.max(280, maxX - minX);
+        const height = Math.max(280, maxY - minY);
+        const k = clamp(Math.min(rect.width / width, rect.height / height), 0.42, 1.35);
+        transform.k = k;
+        transform.x = rect.width / 2 - ((minX + maxX) / 2) * k;
+        transform.y = rect.height / 2 - ((minY + maxY) / 2) * k;
+        applyTransform();
+      }
+
+      function centerOnNode(node) {
+        const rect = svg.getBoundingClientRect();
+        transform.x = rect.width / 2 - node._x * transform.k;
+        transform.y = rect.height / 2 - node._y * transform.k;
+        applyTransform();
+      }
+
+      function applyTransform() {
+        viewport.setAttribute("transform", "translate(" + transform.x.toFixed(2) + " " + transform.y.toFixed(2) + ") scale(" + transform.k.toFixed(3) + ")");
+        zoomLabel.textContent = "缩放 " + Math.round(transform.k * 100) + "%";
+      }
+
+      function zoomFromCenter(multiplier) {
+        const rect = svg.getBoundingClientRect();
+        const mx = rect.width / 2;
+        const my = rect.height / 2;
+        const nextK = clamp(transform.k * multiplier, 0.34, 2.8);
+        const wx = (mx - transform.x) / transform.k;
+        const wy = (my - transform.y) / transform.k;
+        transform.x = mx - wx * nextK;
+        transform.y = my - wy * nextK;
+        transform.k = nextK;
+        applyTransform();
+      }
+
+      function setTab(tab) {
+        const showRoll = tab === "roll";
+        detailTab.classList.toggle("active", !showRoll);
+        rollTab.classList.toggle("active", showRoll);
+        detailPane.classList.toggle("active", !showRoll);
+        rollPane.classList.toggle("active", showRoll);
+        if (showRoll) renderGame();
+      }
+
+      function toggleSidebar(side) {
+        const isLeft = side === "left";
+        const className = isLeft ? "left-collapsed" : "right-collapsed";
+        const button = isLeft ? leftPanelToggle : rightPanelToggle;
+        const collapsed = app.classList.toggle(className);
+        button.textContent = isLeft ? (collapsed ? "›" : "‹") : (collapsed ? "‹" : "›");
+        const action = collapsed ? "展开" : "收起";
+        const label = action + (isLeft ? "筛选栏" : "详情栏");
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        button.setAttribute("aria-expanded", String(!collapsed));
+        setTimeout(fitToVisible, 240);
+      }
+
+      function toggleMusic() {
+        if (musicPlaying) {
+          stopMusic();
+          return;
+        }
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) {
+          musicToggle.title = "当前浏览器不支持背景音乐";
+          musicToggle.setAttribute("aria-label", musicToggle.title);
+          return;
+        }
+
+        musicAudioContext = new AudioContextClass();
+        musicMaster = musicAudioContext.createGain();
+        musicDry = musicAudioContext.createGain();
+        musicReverb = musicAudioContext.createConvolver();
+        const wet = musicAudioContext.createGain();
+
+        musicDry.gain.value = 0.86;
+        wet.gain.value = 0.16;
+        musicReverb.buffer = createMusicImpulse(musicAudioContext, 2.1);
+        musicDry.connect(musicMaster);
+        musicReverb.connect(wet);
+        wet.connect(musicMaster);
+        musicMaster.connect(musicAudioContext.destination);
+
+        const now = musicAudioContext.currentTime;
+        const target = musicVolumeGain();
+        musicMaster.gain.setValueAtTime(0.0001, now);
+        musicMaster.gain.exponentialRampToValueAtTime(Math.max(0.0001, target), now + 0.9);
+        musicPlaying = true;
+        updateMusicButton();
+        if (musicAudioContext.state === "suspended") musicAudioContext.resume();
+        scheduleMusicPhrase();
+      }
+
+      function stopMusic() {
+        clearTimeout(musicTimer);
+        musicTimer = 0;
+        const context = musicAudioContext;
+        const master = musicMaster;
+        musicPlaying = false;
+        musicAudioContext = null;
+        musicMaster = null;
+        musicDry = null;
+        musicReverb = null;
+        updateMusicButton();
+        if (!context || !master) return;
+        const now = context.currentTime;
+        master.gain.cancelScheduledValues(now);
+        master.gain.setValueAtTime(Math.max(0.0001, master.gain.value), now);
+        master.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+        setTimeout(function () {
+          context.close().catch(function () {});
+        }, 380);
+      }
+
+      function updateMusicButton() {
+        musicToggle.textContent = musicPlaying ? "Ⅱ" : "♪";
+        musicToggle.setAttribute("aria-pressed", String(musicPlaying));
+        musicToggle.title = musicPlaying ? "暂停背景音乐" : "播放背景音乐";
+        musicToggle.setAttribute("aria-label", musicToggle.title);
+      }
+
+      function updateMusicVolume() {
+        if (!musicAudioContext || !musicMaster) return;
+        musicMaster.gain.setTargetAtTime(musicVolumeGain(), musicAudioContext.currentTime, 0.08);
+      }
+
+      function musicVolumeGain() {
+        return Math.max(0.0001, Number(musicVolume.value || 0) / 100 * 0.21);
+      }
+
+      function scheduleMusicPhrase() {
+        if (!musicPlaying || !musicAudioContext) return;
+        const scale = [293.66, 329.63, 392.0, 440.0, 493.88, 587.33];
+        const melody = [0, 2, 3, null, 2, 1, 0, null, 0, 1, 2, 4, 3, 2, 1, null, 0, 2, 4, 5, 4, 2, 1, null];
+        const beat = 0.68;
+        const start = musicAudioContext.currentTime + 0.08;
+        melody.forEach(function (step, index) {
+          const time = start + index * beat;
+          if (step !== null) {
+            playMusicPluck(scale[step], time, index % 4 === 0 ? 1.7 : 1.25, index % 4 === 0 ? 0.38 : 0.3);
+          }
+          if (index % 8 === 0) playMusicPluck(scale[0] / 2, time, 2.5, 0.16);
+        });
+        musicTimer = setTimeout(scheduleMusicPhrase, (melody.length * beat - 0.12) * 1000);
+      }
+
+      function playMusicPluck(frequency, time, duration, level) {
+        if (!musicAudioContext || !musicDry || !musicReverb) return;
+        const fundamental = musicAudioContext.createOscillator();
+        const overtone = musicAudioContext.createOscillator();
+        const overtoneGain = musicAudioContext.createGain();
+        const filter = musicAudioContext.createBiquadFilter();
+        const envelope = musicAudioContext.createGain();
+
+        fundamental.type = "sine";
+        fundamental.frequency.setValueAtTime(frequency, time);
+        overtone.type = "triangle";
+        overtone.frequency.setValueAtTime(frequency * 2.01, time);
+        overtoneGain.gain.value = 0.14;
+        filter.type = "lowpass";
+        filter.Q.value = 1.2;
+        filter.frequency.setValueAtTime(2400, time);
+        filter.frequency.exponentialRampToValueAtTime(850, time + duration);
+        envelope.gain.setValueAtTime(0.0001, time);
+        envelope.gain.exponentialRampToValueAtTime(level, time + 0.018);
+        envelope.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+
+        fundamental.connect(filter);
+        overtone.connect(overtoneGain);
+        overtoneGain.connect(filter);
+        filter.connect(envelope);
+        envelope.connect(musicDry);
+        envelope.connect(musicReverb);
+        fundamental.start(time);
+        overtone.start(time);
+        fundamental.stop(time + duration + 0.04);
+        overtone.stop(time + duration + 0.04);
+      }
+
+      function createMusicImpulse(context, seconds) {
+        const length = Math.floor(context.sampleRate * seconds);
+        const impulse = context.createBuffer(2, length, context.sampleRate);
+        for (let channel = 0; channel < impulse.numberOfChannels; channel += 1) {
+          const data = impulse.getChannelData(channel);
+          for (let index = 0; index < length; index += 1) {
+            const decay = Math.pow(1 - index / length, 2.8);
+            data[index] = (Math.random() * 2 - 1) * decay;
+          }
+        }
+        return impulse;
+      }
+
+      function playDiceRollSound() {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        let context = musicPlaying && musicAudioContext ? musicAudioContext : diceAudioContext;
+        if (!context || context.state === "closed") {
+          context = new AudioContextClass();
+          diceAudioContext = context;
+        }
+        if (context.state === "suspended") context.resume();
+
+        const output = context.createGain();
+        const limiter = context.createDynamicsCompressor();
+        const start = context.currentTime + 0.015;
+        output.gain.setValueAtTime(1.35, start);
+        limiter.threshold.value = -16;
+        limiter.knee.value = 10;
+        limiter.ratio.value = 5;
+        limiter.attack.value = 0.003;
+        limiter.release.value = 0.16;
+        output.connect(limiter);
+        limiter.connect(context.destination);
+        [0, 0.045, 0.096, 0.154, 0.224, 0.306, 0.402, 0.51].forEach(function (offset, index) {
+          scheduleDiceClick(context, output, start + offset, 0.19 - index * 0.009);
+        });
+        scheduleDiceLanding(context, output, start + 0.61);
+        setTimeout(function () {
+          try { output.disconnect(); } catch (error) {}
+          try { limiter.disconnect(); } catch (error) {}
+        }, 1250);
+      }
+
+      function scheduleDiceClick(context, output, time, level) {
+        const duration = 0.036 + Math.random() * 0.024;
+        const frameCount = Math.max(1, Math.floor(context.sampleRate * duration));
+        const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+        const samples = buffer.getChannelData(0);
+        for (let index = 0; index < frameCount; index += 1) {
+          samples[index] = (Math.random() * 2 - 1) * Math.pow(1 - index / frameCount, 3.2);
+        }
+        const source = context.createBufferSource();
+        const filter = context.createBiquadFilter();
+        const gain = context.createGain();
+        source.buffer = buffer;
+        filter.type = "bandpass";
+        filter.frequency.setValueAtTime(620 + Math.random() * 760, time);
+        filter.Q.value = 1.4 + Math.random() * 1.8;
+        gain.gain.setValueAtTime(0.0001, time);
+        gain.gain.exponentialRampToValueAtTime(Math.max(0.001, level), time + 0.003);
+        gain.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+        source.connect(filter);
+        filter.connect(gain);
+        gain.connect(output);
+        source.start(time);
+        source.stop(time + duration + 0.01);
+      }
+
+      function scheduleDiceLanding(context, output, time) {
+        const oscillator = context.createOscillator();
+        const gain = context.createGain();
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(155, time);
+        oscillator.frequency.exponentialRampToValueAtTime(82, time + 0.13);
+        gain.gain.setValueAtTime(0.0001, time);
+        gain.gain.exponentialRampToValueAtTime(0.22, time + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.16);
+        oscillator.connect(gain);
+        gain.connect(output);
+        oscillator.start(time);
+        oscillator.stop(time + 0.18);
+      }
+
+      function playGameOutcomeSound(outcome) {
+        if (!outcome || isRoundEnding(outcome.message)) return;
+
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContextClass) return;
+        let context = musicPlaying && musicAudioContext ? musicAudioContext : diceAudioContext;
+        if (!context || context.state === "closed") {
+          context = new AudioContextClass();
+          diceAudioContext = context;
+        }
+        if (context.state === "suspended") context.resume();
+
+        const output = context.createGain();
+        const limiter = context.createDynamicsCompressor();
+        const start = context.currentTime + 0.78;
+        const motif = outcomeSoundMotif(outcome);
+        output.gain.value = motif.gain;
+        limiter.threshold.value = -14;
+        limiter.knee.value = 9;
+        limiter.ratio.value = 4;
+        limiter.attack.value = 0.004;
+        limiter.release.value = 0.2;
+        output.connect(limiter);
+        limiter.connect(context.destination);
+
+        motif.notes.forEach(function (frequency, index) {
+          scheduleOutcomeBell(context, output, frequency, start + index * motif.spacing, motif.duration);
+        });
+        setTimeout(function () {
+          try { output.disconnect(); } catch (error) {}
+          try { limiter.disconnect(); } catch (error) {}
+        }, 2400);
+      }
+
+      function outcomeSoundMotif(outcome) {
+        const key = String(outcome.soundKey || "");
+        if (key === "fulu-fu") return { notes: [523.25, 659.25, 783.99], spacing: 0.14, duration: 0.56, gain: 0.56 };
+        if (key === "fulu-shou") return { notes: [392.0, 349.23, 293.66], spacing: 0.24, duration: 0.72, gain: 0.48 };
+        if (key === "fulu-lu") return { notes: [493.88, 659.25, 493.88, 783.99], spacing: 0.1, duration: 0.42, gain: 0.52 };
+        if (key === "fulu-pass") return { notes: [220.0, 196.0], spacing: 0.18, duration: 0.34, gain: 0.34 };
+        if (outcome.tone === "win") return { notes: [440.0, 554.37, 659.25], spacing: 0.14, duration: 0.5, gain: 0.5 };
+
+        const scale = [196.0, 220.0, 246.94, 293.66, 329.63, 392.0, 440.0, 493.88];
+        const hash = hashOutcomeKey(key);
+        const count = 2 + hash % 3;
+        const notes = [];
+        for (let index = 0; index < count; index += 1) {
+          let scaleIndex = (hash >>> (index * 5)) % scale.length;
+          if (outcome.tone === "penalty") scaleIndex = scale.length - 1 - scaleIndex;
+          notes.push(scale[scaleIndex]);
+        }
+        return {
+          notes: notes,
+          spacing: 0.11 + ((hash >>> 9) % 5) * 0.025,
+          duration: 0.32 + ((hash >>> 14) % 4) * 0.08,
+          gain: outcome.tone === "penalty" ? 0.4 : 0.34
+        };
+      }
+
+      function hashOutcomeKey(value) {
+        let hash = 2166136261;
+        for (let index = 0; index < value.length; index += 1) {
+          hash ^= value.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return hash >>> 0;
+      }
+
+      function isRoundEnding(message) {
+        return /本令结束|令止|本轮功成|完成六顺|功成名就|已成，本令结束/.test(String(message || ""));
+      }
+
+      function queueRoundEndModal(ruleName) {
+        clearTimeout(roundEndTimer);
+        roundEndTimer = setTimeout(function () {
+          roundEndTimer = 0;
+          roundEndMessage.textContent = ruleName + "已完成，请重新开局或选择其他酒令。";
+          roundEndModal.hidden = false;
+          roundEndConfirm.focus();
+        }, 900);
+      }
+
+      function closeRoundEndModal() {
+        clearTimeout(roundEndTimer);
+        roundEndTimer = 0;
+        roundEndModal.hidden = true;
+      }
+
+      function scheduleOutcomeBell(context, output, frequency, time, duration) {
+        const fundamental = context.createOscillator();
+        const shimmer = context.createOscillator();
+        const shimmerGain = context.createGain();
+        const envelope = context.createGain();
+        fundamental.type = "sine";
+        shimmer.type = "triangle";
+        fundamental.frequency.setValueAtTime(frequency, time);
+        shimmer.frequency.setValueAtTime(frequency * 2, time);
+        shimmerGain.gain.value = 0.12;
+        envelope.gain.setValueAtTime(0.0001, time);
+        envelope.gain.exponentialRampToValueAtTime(0.24, time + 0.012);
+        envelope.gain.exponentialRampToValueAtTime(0.0001, time + duration);
+        fundamental.connect(envelope);
+        shimmer.connect(shimmerGain);
+        shimmerGain.connect(envelope);
+        envelope.connect(output);
+        fundamental.start(time);
+        shimmer.start(time);
+        fundamental.stop(time + duration + 0.03);
+        shimmer.stop(time + duration + 0.03);
+      }
+
+      function createBurst(node) {
+        const count = 18;
+        for (let i = 0; i < count; i += 1) {
+          const angle = (Math.PI * 2 * i / count) + Math.random() * 0.18;
+          const distance = 20 + Math.random() * 42;
+          const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          dot.setAttribute("cx", node._x);
+          dot.setAttribute("cy", node._y);
+          dot.setAttribute("r", String(2 + Math.random() * 2));
+          dot.setAttribute("fill", "#FFF1BA");
+          dot.setAttribute("opacity", "0.9");
+          burstLayer.appendChild(dot);
+          dot.animate([
+            { transform: "translate(0px, 0px)", opacity: 0.95 },
+            { transform: "translate(" + Math.cos(angle) * distance + "px, " + Math.sin(angle) * distance + "px)", opacity: 0 }
+          ], { duration: 680, easing: "cubic-bezier(.2,.8,.2,1)" });
+          setTimeout(function () {
+            dot.remove();
+          }, 720);
+        }
+      }
+
+      function showTooltip(node, event) {
+        tooltip.textContent = tooltipText(node);
+        tooltip.classList.add("show");
+        moveTooltip(event);
+      }
+
+      function moveTooltip(event) {
+        const pad = 14;
+        const rect = tooltip.getBoundingClientRect();
+        let x = event.clientX + 12;
+        let y = event.clientY + 12;
+        if (x + rect.width + pad > window.innerWidth) x = event.clientX - rect.width - 12;
+        if (y + rect.height + pad > window.innerHeight) y = event.clientY - rect.height - 12;
+        tooltip.style.left = Math.max(pad, x) + "px";
+        tooltip.style.top = Math.max(pad, y) + "px";
+      }
+
+      function hideTooltip() {
+        tooltip.classList.remove("show");
+      }
+
+      function tooltipText(node) {
+        if (node.level === "L0") return node.name + "\n单击展开骰子数量，双击收回";
+        if (node.level === "L1") return node.name + "\n" + countDescendants(node, "L3") + " 条令目\n单击展开，双击收回";
+        if (node.level === "L2") return node.name + "\n" + countDescendants(node, "L3") + " 条令目\n单击展开，双击收回";
+        if (node.level === "L3") {
+          const details = ruleByName.get(node.name);
+          return node.name + "\n" + (details ? "用骰：" + details.diceCount + "枚\n文化主题：" + details.cultureGroup : "") + "\n点击查看详情与互动玩法";
+        }
+        return node.name;
+      }
+
+      function countDescendants(node, level) {
+        let count = 0;
+        (node.children || []).forEach(function visit(child) {
+          if (child.level === level) count += 1;
+          (child.children || []).forEach(visit);
+        });
+        return count;
+      }
+
+      function nodeRadius(node) {
+        const size = node.visual && node.visual.nodeSize ? Number(node.visual.nodeSize) : 20;
+        return Math.max(6, Math.min(25, size / 2));
+      }
+
+      function nodeColor(node) {
+        if (node.visual && node.visual.nodeColor) return node.visual.nodeColor;
+        const palette = (appData.uiDesign || {}).nodePalette || {};
+        if (node.level === "L0") return palette.L0 || "#FFE7A8";
+        if (node.level === "L1") return palette.L1 || "#FFD6A5";
+        if (node.level === "L3") return palette.L3 || "#F8C7D8";
+        if (node.type === "维度") return palette.L4_dimension || "#E6F4D7";
+        if (node.type === "难度") return palette.L4_difficulty || "#FDE2C5";
+        if (node.type === "玩法") return palette.L4_play || "#E7E0FA";
+        if (node.type === "关键词") return palette.L4_keywords || "#F7E9A6";
+        if ((node.name || "").includes("点数和")) return palette.L2_sum || "#BFE3D0";
+        if ((node.name || "").includes("组合")) return palette.L2_combo || "#C9D8FF";
+        return palette.L2_single || "#F7C9D4";
+      }
+
+      function labelSize(node) {
+        if (node.level === "L0") return 20;
+        if (node.level === "L1") return 16;
+        if (node.level === "L2") return 13;
+        if (node.level === "L3") return 12;
+        return 10.5;
+      }
+
+      function displayName(node) {
+        const max = node.level === "L4" ? 14 : node.level === "L3" ? 10 : 12;
+        return truncate((node.name || "").replace(/^玩法：/, ""), max);
+      }
+
+      function truncate(value, max) {
+        value = String(value || "");
+        return value.length > max ? value.slice(0, max - 1) + "…" : value;
+      }
+
+      function polar(angle, radius) {
+        return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+      }
+
+      function searchableText(node) {
+        const details = ruleByName.get(node.name);
+        return [
+          node.name,
+          node.type,
+          node.summary,
+          node.dimension,
+          node.difficulty,
+          node.mechanism,
+          node.play,
+          valueText(node.keywords),
+          valueText(node.value),
+          details && details.diceRequirement,
+          details && details.tools,
+          details && details.coreRule,
+          details && details.cultureGroup
+        ].filter(Boolean).join(" ");
+      }
+
+      function unique(values) {
+        return Array.from(new Set(values.filter(Boolean))).sort(function (a, b) {
+          return String(a).localeCompare(String(b), "zh-CN");
+        });
+      }
+
+      function valueText(value) {
+        if (Array.isArray(value)) return value.join("、");
+        if (value && typeof value === "object") return JSON.stringify(value);
+        return value === undefined || value === null ? "" : String(value);
+      }
+
+      function normalValue(value) {
+        if (Array.isArray(value)) return value.map(String);
+        return [String(value || "")];
+      }
+
+      function valuesOverlap(a, b) {
+        const left = normalValue(a);
+        const right = normalValue(b);
+        return left.some(function (x) {
+          return right.some(function (y) {
+            return x === y || x.includes(y) || y.includes(x);
+          });
+        });
+      }
+
+      function colorToRgba(hex, alpha) {
+        const clean = String(hex).replace("#", "");
+        const r = parseInt(clean.slice(0, 2), 16);
+        const g = parseInt(clean.slice(2, 4), 16);
+        const b = parseInt(clean.slice(4, 6), 16);
+        return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+      }
+
+      function endDrag(event) {
+        if (!dragState || dragState.id !== event.pointerId) return;
+        dragState = null;
+        svg.classList.remove("dragging");
+      }
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function esc(value) {
+        return String(value === undefined || value === null ? "" : value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function cssEscape(value) {
+        if (window.CSS && CSS.escape) return CSS.escape(value);
+        return String(value).replace(/"/g, "\\\"");
+      }
+    })();
+  </script>
+</body>
+</html>
